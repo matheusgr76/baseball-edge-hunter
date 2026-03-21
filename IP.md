@@ -44,8 +44,9 @@ baseball_edge_hunter/
 │   └── edge.py              ✅ Phase 1+2 — accepts CanonicalGame or CalibratedGame
 ├── orchestration/
 │   └── pipeline.py          ✅ Phase 1+2 — calibration step wired
-└── output/
-    └── report_formatter.py  ✅ Phase 1+2 — real factor rows
+├── output/
+│   ├── report_formatter.py  ✅ Phase 1+2 — real factor rows
+│   └── clv_tracker.py       ✅ Phase 3a — signal log, CLV resolution, beat-rate summary
 ```
 
 **Pending first live-run verifications (regular season ~April 1):**
@@ -143,14 +144,41 @@ Replace Phase 1 placeholder factor row with real factor rows from `CalibratedGam
 
 ---
 
-## Phase 3: Validation & CLV Tracking
+## Phase 3: Validation & CLV Tracking ✅ COMPLETE (2026-03-21)
 
-**Goal:** Prove the system generates real edge, not noise.
+### Phase 3a — CLV Tracker ✅ COMPLETE (2026-03-21)
 
-- CLV tracker: log signal_time + signal_line, update with closing_line post-game
-- Target: ≥55% CLV beat-rate over 100+ bets
-- Historical backtest: 2024/2025 season
-- THE metric is CLV%, not ROI (too small sample otherwise)
+**Goal:** Log every pipeline signal at signal-time and track edge quality via CLV beat-rate.
+
+**File:** `output/clv_tracker.py`
+
+**API:**
+- `log_signals(edges)` — called by `pipeline.py` after edge detection; appends to `output/predictions_log.json` (idempotent, dedupes by `entry_id`)
+- `resolve_signal(game_id, team, closing_line)` — records closing Polymarket price post-game; computes `CLV = closing_line - signal_time_prob`
+- `clv_summary()` → dict with beat-rate, avg CLV, target status
+- `print_clv_summary()` — prints running stats in terminal at end of every pipeline run
+
+**Target:** ≥55% CLV beat-rate over ≥100 resolved actionable signals
+
+**Integration:** Pipeline Steps 8 (log) → 9 (CSV) → 10 (CLV summary print)
+
+### Phase 3c — Reporting ✅ COMPLETE (2026-03-21)
+
+**Goal:** Persist reports and surface weekly/cumulative performance in terminal.
+
+**New functions added:**
+- `output/report_formatter.py` → `save_daily_report(all_edges, output_dir)` — writes `output/daily_report_{date}.txt` on every pipeline run (even no-edge days)
+- `output/clv_tracker.py` → `weekly_summary()` — groups resolved actionable signals by ISO week; returns beat-rate, avg CLV, total CLV per week
+- `output/clv_tracker.py` → `print_weekly_summary()` — terminal table; ✅ flag when ≥55% beat-rate
+- `output/clv_tracker.py` → `print_pnl_chart()` — Unicode sparkline of cumulative CLV P&L over all resolved signals
+
+**Pipeline integration (pipeline.py):**
+```
+Step 7b: save_daily_report()          ← NEW (after print_session_summary)
+Step 10: print_clv_summary()
+         print_weekly_summary()       ← NEW
+         print_pnl_chart()            ← NEW
+```
 
 ---
 

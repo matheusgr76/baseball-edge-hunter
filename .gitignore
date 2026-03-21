@@ -8,3 +8,6 @@ output/*.csv
 *.egg-info/
 dist/
 build/
+past-seasons/
+output/predictions_log.json
+output/daily_report_*.txt

@@ -275,3 +275,72 @@ def export_csv(all_edges: List[EdgeAnalysis], output_dir: str = "output") -> str
 
     print(f"  📁 CSV exported: {filepath}")
     return filepath
+
+
+# ============================================================================
+# DAILY REPORT PERSISTENCE
+# ============================================================================
+
+def save_daily_report(
+    all_edges: List[EdgeAnalysis],
+    output_dir: str = "output",
+) -> str:
+    """
+    Persist today's analysis summary to output/daily_report_{date}.txt.
+    Written even when all_edges is empty (records a no-edge day).
+    Returns the file path written.
+    """
+    os.makedirs(output_dir, exist_ok=True)
+    date_str = datetime.now().strftime("%Y-%m-%d")
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    filepath = os.path.join(output_dir, f"daily_report_{date_str}.txt")
+
+    lines = [
+        "╔" + "═" * 108 + "╗",
+        "║" + f"  ⚾  MLB EDGE HUNTER — DAILY SIGNAL REPORT  |  {now_str}".ljust(108) + "║",
+        "╚" + "═" * 108 + "╝",
+        "",
+        "=" * 140,
+        "  📊 ANALYSIS SUMMARY",
+        "=" * 140,
+        "",
+        f"  {'GAME':<50} | {'FAVORITE':<25} | {'PROB':>5} | "
+        f"{'CONF':>4} | {'WCS':>5} | {'SIGNAL':<14} | {'MARKET':>6} | {'EDGE':>7}",
+        f"  {'-'*50}-+-{'-'*25}-+-{'-'*5}-+-{'-'*4}-+-{'-'*5}-+-{'-'*14}-+-{'-'*6}-+-{'-'*7}",
+    ]
+
+    actionable = []
+    for e in all_edges:
+        game = f"{e.opponent} @ {e.team_name}" if e.team == "home" else f"{e.team_name} @ {e.opponent}"
+        fav = e.team_name if e.true_prob >= 50.0 else e.opponent
+        wcs = round(e.true_prob - 8.0, 1)
+        sig = _SIGNAL_EMOJI.get(e.signal, e.signal)
+        g = game[:47] + "..." if len(game) > 50 else game
+        f_ = fav[:22] + "..." if len(fav) > 25 else fav
+        lines.append(
+            f"  {g:<50} | {f_:<25} | {e.true_prob:>4.1f}% | {e.confidence_pct:>3}% | "
+            f"{wcs:>4.1f} | {sig:<14} | {e.polymarket_prob:>5.1f}% | {e.edge_pp:>+6.2f}%"
+        )
+        if e.actionable:
+            actionable.append(e)
+
+    lines += ["", "=" * 140, ""]
+
+    if actionable:
+        lines.append(f"  🎯 ACTIONABLE EDGES: {len(actionable)} found")
+        for e in actionable:
+            emoji = "🔥" if e.signal == "STRONG BET" else "✅"
+            lines.append(
+                f"     {emoji} {e.team_name} — Edge: {e.edge_pp:+.2f}pp "
+                f"| Prob: {e.true_prob:.1f}% | Confidence: {e.confidence_pct}% → {e.signal}"
+            )
+    else:
+        lines.append("  ⏳ No actionable edges today...")
+
+    lines += ["", f"  {_SIGNAL_LEGEND}", ""]
+
+    with open(filepath, "w", encoding="utf-8") as fh:
+        fh.write("\n".join(lines))
+
+    print(f"  📄 Daily report saved: {filepath}")
+    return filepath

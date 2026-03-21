@@ -20,6 +20,13 @@ from output.report_formatter import (
     print_game_section,
     print_session_summary,
     export_csv,
+    save_daily_report,
+)
+from output.clv_tracker import (
+    log_signals,
+    print_clv_summary,
+    print_weekly_summary,
+    print_pnl_chart,
 )
 from models import EdgeAnalysis, PipelineResult
 import config
@@ -134,9 +141,22 @@ def run_pipeline() -> PipelineResult:
     ranked_edges = rank_by_edge(all_edges)
     print_session_summary(ranked_edges)
 
-    # ── Step 8: CSV export ───────────────────────────────────────────────────
+    # ── Step 7b: Persist daily report ────────────────────────────────────────
+    save_daily_report(ranked_edges, config.OUTPUT_DIRECTORY)
+
+    # ── Step 8: CLV logging ──────────────────────────────────────────────────
+    new_logged = log_signals(ranked_edges)
+    if new_logged:
+        print(f"  📝 CLV tracker: {new_logged} new signal(s) logged → output/predictions_log.json")
+
+    # ── Step 9: CSV export ───────────────────────────────────────────────────
     if ranked_edges:
         export_csv(ranked_edges, config.OUTPUT_DIRECTORY)
+
+    # ── Step 10: CLV running summary + weekly + P&L chart ────────────────────
+    print_clv_summary()
+    print_weekly_summary()
+    print_pnl_chart()
 
     elapsed = round(time.time() - start_time, 2)
     actionable_count = sum(1 for e in ranked_edges if e.actionable)
