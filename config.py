@@ -1,0 +1,63 @@
+"""
+MLB Edge Hunter - Configuration
+Centralized settings for all pipeline components
+"""
+
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+# ============================================================================
+# API CONFIGURATION
+# ============================================================================
+
+ODDS_API_KEY: str = os.getenv("ODDS_API_KEY", "")
+ODDS_API_BASE: str = "https://api.the-odds-api.com/v4"
+ODDS_SPORT: str = "baseball_mlb"
+ODDS_REGIONS: str = "us"
+ODDS_MARKETS: str = "h2h"
+ODDS_BOOKMAKERS: str = "fanduel,draftkings,williamhill_us,betmgm,caesars"
+
+# Polymarket Gamma API
+GAMMA_API_BASE: str = "https://gamma-api.polymarket.com"
+POLYMARKET_SLUG_PREFIX: str = "mlb"   # e.g. mlb-nyy-bos-2026-04-01
+POLYMARKET_TIME_HORIZON_HOURS: int = 36   # MLB games can be afternoon/evening ET
+
+# ============================================================================
+# NORMALIZATION SETTINGS
+# ============================================================================
+
+DEVIG_METHOD: str = "multiplicative"
+PROB_SUM_TOLERANCE: float = 0.5   # ±0.5pp from 100% is acceptable
+
+# ============================================================================
+# SIGNAL THRESHOLDS (percentage points vs Polymarket)
+# ============================================================================
+
+STRONG_BET_EDGE_PP: float = 3.0
+STRONG_BET_CONF_PCT: int = 80
+
+BET_EDGE_PP: float = 2.5
+BET_CONF_PCT: int = 70
+
+FADE_MIN_PP: float = -1.0     # Edge <= -1.0 enters fade territory
+AVOID_THRESHOLD_PP: float = -3.0   # Edge < -3.0 → AVOID
+
+# ============================================================================
+# PIPELINE SETTINGS
+# ============================================================================
+
+MIN_POLYMARKET_LIQUIDITY: float = 500.0   # MLB markets thinner than NBA
+MIN_BOOKMAKERS: int = 2                   # Minimum books to form consensus
+
+REQUEST_TIMEOUT: int = 10
+MAX_RETRIES: int = 3
+
+# ============================================================================
+# OUTPUT SETTINGS
+# ============================================================================
+
+OUTPUT_DIRECTORY: str = "output"
+LOG_LEVEL: str = "INFO"
+DEBUG_MODE: bool = False
