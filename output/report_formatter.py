@@ -81,22 +81,27 @@ def print_game_section(
     )
     print(f"  {'-'*35}-+-{'-'*8}-+-{'-'*58}-+-{'-'*7}-+-{'-'*45}")
 
-    # Phase 1: single placeholder factor row
-    f = _PLACEHOLDER_FACTOR
-    # Use favorite's true_prob as the result value
-    fav_prob = home_edge.true_prob if fav == home_team else away_edge.true_prob
-    res_str = f"{fav_prob:>7.2f}%"
-    dev_str = f"{f.devil:>+6.2f}%"
-    expl = f.explanation[:55] + "..." if len(f.explanation) > 58 else f.explanation
-    da = f.devil_advocate[:42] + "..." if len(f.devil_advocate) > 45 else f.devil_advocate
-    print(f"  {f.name:<35} | {res_str} | {expl:<58} | {dev_str} | {da}")
+    # Use favorite's factors if available, else placeholder
+    fav_edge = home_edge if fav == home_team else away_edge
+    factors_to_show = fav_edge.factors if fav_edge.factors else [_PLACEHOLDER_FACTOR]
+
+    for f in factors_to_show:
+        res_str = f"{f.result:>+7.2f}%"
+        dev_str = f"{f.devil:>+6.2f}%"
+        expl = f.explanation[:55] + "..." if len(f.explanation) > 58 else f.explanation
+        da = f.devil_advocate[:42] + "..." if len(f.devil_advocate) > 45 else f.devil_advocate
+        print(f"  {f.name:<35} | {res_str} | {expl:<58} | {dev_str} | {da}")
 
     # Probability summary
+    fav_prob = home_edge.true_prob if fav == home_team else away_edge.true_prob
+    fav_conf = home_edge.confidence_pct if fav == home_team else away_edge.confidence_pct
+    fav_consensus = home_edge.consensus_prob if fav == home_team else away_edge.consensus_prob
     print()
     print(f"  📊 PROBABILITY SUMMARY")
     print(
         f"  Calculated Probability: {fav_prob:.1f}% "
-        f"| Analysis Confidence: ({home_edge.confidence_pct if fav == home_team else away_edge.confidence_pct}%)"
+        f"| Consensus: {fav_consensus:.1f}% "
+        f"| Analysis Confidence: ({fav_conf}%)"
     )
     print()
 
@@ -218,14 +223,15 @@ def export_csv(all_edges: List[EdgeAnalysis], output_dir: str = "output") -> str
                 e.signal, f"{e.polymarket_prob:.2f}", f"{e.edge_pp:+.2f}",
             ])
 
-            # FACTOR (Phase 1 placeholder)
-            ph = _PLACEHOLDER_FACTOR
-            writer.writerow([
-                "FACTOR", game, fav, dog,
-                ph.name, f"{e.true_prob:.2f}", ph.explanation,
-                f"{ph.devil:.2f}", ph.devil_advocate,
-                "", "", "", "", "", "",
-            ])
+            # FACTOR rows (real calibration factors, or placeholder if none)
+            factor_rows = e.factors if e.factors else [_PLACEHOLDER_FACTOR]
+            for f_row in factor_rows:
+                writer.writerow([
+                    "FACTOR", game, fav, dog,
+                    f_row.name, f"{f_row.result:.2f}", f_row.explanation,
+                    f"{f_row.devil:.2f}", f_row.devil_advocate,
+                    "", "", "", "", "", "",
+                ])
 
             # SUMMARY
             writer.writerow([

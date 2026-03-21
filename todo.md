@@ -1,110 +1,66 @@
 # TODO — MLB Edge Hunter
 
-## Phase 1: Core Pipeline (Moneyline)
+## DONE
 
-### 1a — Polymarket Ingestion
-- [ ] Test gamma API: `GET /events?closed=false&tag=mlb&limit=5`
-- [ ] If `mlb` tag fails, try: `baseball`, `mlb-baseball`, `major-league-baseball`
-- [ ] Document actual market structure (2-way binary? event+markets?)
-- [ ] Build `ingestion/polymarket.py` — fetch + parse into standardized format
-- [ ] Handle edge cases: postponed games, missing markets, duplicate events
-- [ ] **VERIFY:** Successfully parses ≥5 upcoming MLB games with valid probabilities
-
-### 1b — Bookmaker Ingestion
-- [ ] Build `ingestion/bookmakers.py` — fetch from The Odds API (`baseball_mlb`, `h2h`)
-- [ ] Parse response into standardized format per game per book
-- [ ] Handle: missing books, stale lines, API rate limits
-- [ ] **VERIFY:** Returns odds from ≥3 bookmakers per game
-
-### 1c — Normalization
-- [ ] Build `normalization/devig.py` — Shin devig for 2-way markets
-- [ ] Build `normalization/teams.py` — 30 MLB teams, ≥3 name variants each
-- [ ] Include common abbreviations: NYY, LAD, SF, etc.
-- [ ] Calculate weighted consensus across all books
-- [ ] **VERIFY:** Devigged probs sum to 100% (±0.5%), all team names resolve
-
-### 1d — Edge Detection
-- [ ] Build `comparison/edge.py`
-- [ ] EdgeAnalysis dataclass: team, opponent, consensus_prob, polymarket_prob, alpha, signal
-- [ ] Signal logic: 🔥 Strong Bet (≥3.0pp+conf≥80%), ✅ Bet (≥2.5pp+conf≥70%), ⏭️ Skip (<2.5pp), 👎 Fade (-1 to -3pp), 🚫 AVOID (<-3pp)
-- [ ] **VERIFY:** Test with synthetic data — signals assigned correctly at boundaries
-
-### 1e — Pipeline Orchestration
-- [ ] Build `orchestration/pipeline.py` with `run_pipeline()` entry point
-- [ ] Wire: Ingestion → Normalization → Comparison → Output
-- [ ] Build `output/report_formatter.py` — **MUST match basketball_edge_hunter format exactly:**
-  - [ ] Session header: `╔═╗║╚═╝` box with ⚾ emoji + timestamp
-  - [ ] Per-game factor table: FACTOR | RESULT | EXPLANATION | DEVIL | DEVIL ADVOCATE
-  - [ ] Probability summary block: `📊 PROBABILITY SUMMARY`
-  - [ ] Session summary table: GAME | FAVORITE | PROB | CONF | WCS | BET | MARKET | EDGE
-  - [ ] Session summary title: `📊 ANALYSIS SUMMARY` (not "Session Summary")
-  - [ ] Column: SIGNAL (not BET) — 🔥 Strong Bet, ✅ Bet, ⏭️ Skip, 👎 Fade, 🚫 AVOID
-  - [ ] Anchor callout: `🎯 ACTIONABLE EDGES: N found` with 🔥/✅ per signal + legend at bottom
-  - [ ] No-signal fallback: `⏳ No actionable edges today...`
-  - [ ] CSV export: ROW_TYPE (HEADER/FACTOR/SUMMARY) per game, same columns as basketball
-- [ ] Error handling: graceful degradation if one source fails
-- [ ] Build `config.py` — API keys, thresholds, toggles
-- [ ] Build `requirements.txt` (include `tabulate`)
-- [ ] **VERIFY:** End-to-end run on live data produces formatted output matching basketball_edge_hunter
+### Phase 1: Core Pipeline ✅ (2026-03-21)
+- [x] Build `models.py` — all dataclasses (RawBookmakerOdds, CanonicalGame, PolymarketOpportunity, EdgeAnalysis, PipelineResult)
+- [x] Build `config.py` — API keys from env, signal thresholds, liquidity floor
+- [x] Build `ingestion/bookmakers.py` — The Odds API (`baseball_mlb`, `h2h`)
+- [x] Build `ingestion/polymarket.py` — Gamma API slug fetch (`mlb-{away}-{home}-{date}`)
+- [x] Build `normalization/devig.py` — multiplicative 2-way devig
+- [x] Build `normalization/teams.py` — 30 MLB teams, slug abbreviations, raw→canonical mapping
+- [x] Build `comparison/edge.py` — 5-tier signal per outcome (STRONG BET/BET/SKIP/FADE/AVOID)
+- [x] Build `output/report_formatter.py` — terminal report + CSV (basketball_edge_hunter format)
+- [x] Build `orchestration/pipeline.py` — `run_pipeline()` entry point, full wire-up
+- [x] Build `main.py` + `requirements.txt`
+- [x] Smoke tests pass (imports, devig math, signal boundaries, slug construction)
+- [x] GitHub repo created: https://github.com/matheusgr76/baseball-edge-hunter
 
 ---
 
-## Phase 2: Situational Calibration
+## Phase 2: Situational Calibration (IN PROGRESS)
 
-### 2a — Starting Pitcher
-- [ ] Build SP data fetch in `ingestion/mlb_data.py`
-- [ ] Source: PyBaseball or MLB Stats API for today's probable pitchers
-- [ ] Pull SIERA/FIP per pitcher (season + last 30 days)
-- [ ] Adjustment logic: SP quality vs league avg → ±5pp bounded
-- [ ] **VERIFY:** Known ace (e.g., top-5 SIERA) shifts consensus upward
+### 2a — Starting Pitcher Quality
+- [ ] Build `ingestion/mlb_data.py`
+  - [ ] Fetch today's probable pitchers from MLB Stats API
+    - `GET https://statsapi.mlb.com/api/v1/schedule?sportId=1&hydrate=probablePitcher`
+  - [ ] Pull SIERA/FIP per pitcher from PyBaseball (`pitching_stats()`)
+  - [ ] Return `ProbablePitcher(team, name, player_id, siera, fip, hand)`
+- [ ] Build `calibration/factors.py`
+  - [ ] `sp_quality_adjustment(home_sp, away_sp) -> Tuple[float, float]`
+  - [ ] Logic: compare each SP's SIERA vs league average (4.20), scale to ±5pp
+  - [ ] FactorResult output: SIERA delta, explanation, devil's advocate
+- [ ] **VERIFY:** Known ace (low SIERA ~2.8) shifts prob +3–5pp vs replacement-level SP
 
 ### 2b — Bullpen Availability
-- [ ] Track bullpen usage: pitches thrown per reliever in last 48h
-- [ ] Define "fatigued": top 2 RPs threw 25+ pitches in 48h window
-- [ ] Penalty: −2pp (moderate fatigue) to −4pp (severe fatigue)
-- [ ] **VERIFY:** Team with blown bullpen yesterday shows reduced probability
+- [ ] Extend `ingestion/mlb_data.py`
+  - [ ] Fetch recent game logs per relief pitcher (MLB Stats API)
+  - [ ] Track pitches thrown in last 48h per team's top-2 RPs
+  - [ ] Return `BullpenStatus(team, fatigue_level, pitches_48h)`
+- [ ] Extend `calibration/factors.py`
+  - [ ] `bullpen_adjustment(home_bp, away_bp) -> Tuple[float, float]`
+  - [ ] Thresholds: 25–40 pitches → −2pp, 40+ pitches → −4pp
+  - [ ] FactorResult output with usage details
 
 ### 2c — Calibration Integration
-- [ ] Build `calibration/factors.py` — apply all Tier 1 factors
-- [ ] Wire into pipeline between Normalization and Comparison
-- [ ] Bound total calibration adjustment to ±8pp
-- [ ] Recalculate signals post-calibration
-- [ ] **VERIFY:** Calibrated probs still ~100%, pipeline output reflects adjustments
+- [ ] Add `CalibratedGame` + `AdjustmentBreakdown` dataclasses to `models.py`
+- [ ] Update `comparison/edge.py` to accept `CalibratedGame` (true_prob ≠ consensus_prob)
+- [ ] Update `orchestration/pipeline.py`: insert calibration step after normalization
+- [ ] Update `output/report_formatter.py`: replace placeholder factor row with real factors
+- [ ] Bound total adjustment to ±8pp per team
+- [ ] **VERIFY:** Calibrated probs still sum to ~100%, factor table shows real values
 
 ---
 
 ## Phase 3: Validation & CLV
-
-### 3a — CLV Tracker
-- [ ] Log every signal: timestamp, signal_line, game_id
-- [ ] After game starts: record closing line
-- [ ] Calculate CLV per signal
-- [ ] Aggregate: CLV% (% of signals that beat closing line)
-- [ ] **VERIFY:** Logging works for ≥1 full day of signals
-
-### 3b — Historical Backtest
-- [ ] Source historical odds (2024-2025 MLB season)
-- [ ] Run pipeline retroactively against historical data
-- [ ] Track: ROI, hit rate, CLV%, daily volume, max drawdown
-- [ ] **VERIFY:** Sample size ≥200 signals before drawing conclusions
-
-### 3c — Reporting
-- [ ] Daily signal report (console + file)
-- [ ] Weekly performance summary
-- [ ] Cumulative P&L visualization
-- [ ] **VERIFY:** Reports generate automatically after pipeline run
+- [ ] CLV tracker — log signal_line, record closing_line, calculate beat-rate
+- [ ] Historical backtest — 2024/2025 season retroactive run
+- [ ] Weekly performance reporting + P&L chart
 
 ---
 
-## Phase 5: Advanced Factors (Tier 2-3)
-- [ ] Umpire tendencies (scrape UmpScorecards.com)
+## Phase 4: Advanced Factors (Tier 2-3)
+- [ ] Umpire tendencies (UmpScorecards.com)
 - [ ] wRC+ vs SP handedness (FanGraphs splits)
 - [ ] Pythagorean W% regression flag
 - [ ] OAA defensive adjustment
-- [ ] Each factor: add → backtest → keep if +EV, remove if noise
-- [ ] **VERIFY:** Each factor individually improves CLV% or remove it
-
----
-
-## DONE
-(move completed items here)

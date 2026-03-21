@@ -1,7 +1,7 @@
 """
 Orchestration Layer - Pipeline
 Entry point: run_pipeline()
-Flow: Bookmakers → Consensus → Polymarket (gatekeeper) → Edge → Report + CSV
+Flow: Bookmakers → Consensus → Calibration → Polymarket (gatekeeper) → Edge → Report + CSV
 """
 
 import time
@@ -10,8 +10,10 @@ from typing import List
 
 from ingestion.bookmakers import fetch_bookmaker_odds, get_unique_games
 from ingestion.polymarket import get_polymarket_odds
+from ingestion.mlb_data import fetch_probable_pitchers, fetch_bullpen_status
 from normalization.devig import calculate_consensus
 from normalization.teams import normalize_team_name
+from calibration.factors import calibrate_game
 from comparison.edge import calculate_edge, rank_by_edge
 from output.report_formatter import (
     print_session_header,
@@ -32,6 +34,7 @@ def run_pipeline() -> PipelineResult:
     """
     start_time = time.time()
     timestamp = datetime.now()
+    date_str = timestamp.strftime("%Y-%m-%d")
 
     print_session_header()
 
@@ -47,19 +50,26 @@ def run_pipeline() -> PipelineResult:
 
     if not raw_odds:
         print("  ⚠️  No bookmaker odds returned — check API key or season status.")
+        _print_no_edges()
         return _empty_result(timestamp, start_time, errors, warnings)
 
     unique_games = get_unique_games(raw_odds)
     print(f"  📋 {len(unique_games)} unique games found in bookmaker data")
 
-    # ── Step 2-4: Per-game processing ────────────────────────────────────────
+    # ── Step 2: Fetch MLB calibration data (SP + bullpen) ────────────────────
+    print()
+    print("  🔍 Fetching MLB calibration data...")
+    probable_pitchers = fetch_probable_pitchers(date_str)
+    print(f"  ✓ Probable pitchers: {len(probable_pitchers)} teams with data")
+
+    # ── Step 3-6: Per-game processing ────────────────────────────────────────
     print()
     for home_team_raw, away_team_raw, commence_time in unique_games:
         home_canonical = normalize_team_name(home_team_raw)
         away_canonical = normalize_team_name(away_team_raw)
 
         try:
-            # Step 2: Build devigged consensus
+            # Step 3: Build devigged consensus
             game_odds = [
                 o for o in raw_odds
                 if o.home_team == home_team_raw and o.away_team == away_team_raw
@@ -75,7 +85,21 @@ def run_pipeline() -> PipelineResult:
                 )
                 continue
 
-            # Step 3: Polymarket gatekeeper
+            # Step 4: Calibrate (SP + bullpen factors)
+            home_sp = probable_pitchers.get(home_canonical)
+            away_sp = probable_pitchers.get(away_canonical)
+            home_bp = fetch_bullpen_status(home_canonical, date_str)
+            away_bp = fetch_bullpen_status(away_canonical, date_str)
+
+            calibrated = calibrate_game(
+                canonical,
+                home_sp=home_sp,
+                away_sp=away_sp,
+                home_bp=home_bp,
+                away_bp=away_bp,
+            )
+
+            # Step 5: Polymarket gatekeeper
             result = get_polymarket_odds(
                 away_canonical, home_canonical, commence_time, canonical.game_id
             )
@@ -88,8 +112,8 @@ def run_pipeline() -> PipelineResult:
             polymarket_markets_found += 1
             games_analyzed += 1
 
-            # Step 4: Calculate edge (per outcome)
-            edges = calculate_edge(canonical, poly_home, poly_away)
+            # Step 6: Calculate edge (per outcome, using calibrated true probs)
+            edges = calculate_edge(calibrated, poly_home, poly_away)
             all_edges.extend(edges)
 
             # Per-game terminal report
@@ -106,11 +130,11 @@ def run_pipeline() -> PipelineResult:
             print(f"  ⚠️  {msg}")
             continue
 
-    # ── Step 5: Summary output ───────────────────────────────────────────────
+    # ── Step 7: Summary output ───────────────────────────────────────────────
     ranked_edges = rank_by_edge(all_edges)
     print_session_summary(ranked_edges)
 
-    # ── Step 6: CSV export ───────────────────────────────────────────────────
+    # ── Step 8: CSV export ───────────────────────────────────────────────────
     if ranked_edges:
         export_csv(ranked_edges, config.OUTPUT_DIRECTORY)
 
@@ -133,6 +157,13 @@ def run_pipeline() -> PipelineResult:
         warnings=warnings,
         execution_time_seconds=elapsed,
     )
+
+
+def _print_no_edges() -> None:
+    from output.report_formatter import print_session_header
+    print()
+    print("  ⏳ No actionable edges today — no bookmaker data returned.")
+    print()
 
 
 def _empty_result(

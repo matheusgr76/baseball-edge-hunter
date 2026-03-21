@@ -4,7 +4,7 @@ Type-safe dataclasses for all pipeline layers
 """
 
 from dataclasses import dataclass, field
-from typing import Optional, List
+from typing import Optional, List, Dict
 from datetime import datetime
 
 
@@ -88,6 +88,68 @@ class PolymarketOpportunity:
 
 
 # ============================================================================
+# CALIBRATION DATA MODELS (Calibration Layer)
+# ============================================================================
+
+@dataclass
+class ProbablePitcher:
+    """Starting pitcher data for one team"""
+    team: str            # Canonical team name
+    name: str
+    player_id: int
+    fip: float           # Calculated from MLB Stats API components
+    era: float           # Season ERA (fallback when IP too low)
+    ip: float            # Innings pitched (season)
+    hand: str            # "L" or "R"
+    valid: bool = True   # False if sample too small (< 15 IP)
+
+
+@dataclass
+class BullpenStatus:
+    """Recent bullpen usage for one team"""
+    team: str
+    pitches_last_48h: int    # Top-2 relievers combined pitches in last 48h
+    fatigue_level: str       # "fresh" | "moderate" | "heavy"
+    details: str             # Human-readable summary for output
+
+
+@dataclass
+class AdjustmentBreakdown:
+    """Per-factor calibration adjustments for one team"""
+    sp_quality: float = 0.0
+    bullpen: float = 0.0
+    total: float = 0.0
+    capped: bool = False     # True if total hit ±8pp hard cap
+
+
+@dataclass
+class CalibratedGame:
+    """Game with true probabilities after situational calibration"""
+    game_id: str
+    home_team: str
+    away_team: str
+    commence_time: datetime
+
+    # Original consensus (pre-calibration)
+    consensus_home_prob: float
+    consensus_away_prob: float
+
+    # Calibrated "true" probabilities
+    true_home_prob: float
+    true_away_prob: float
+
+    # Per-team adjustment breakdown
+    home_adjustments: AdjustmentBreakdown
+    away_adjustments: AdjustmentBreakdown
+
+    # Factor rows for report output
+    home_factors: List[FactorResult] = field(default_factory=list)
+    away_factors: List[FactorResult] = field(default_factory=list)
+
+    favorite: str = "home"
+
+
+# ============================================================================
 # COMPARISON DATA MODELS (Comparison Layer)
 # ============================================================================
 
@@ -113,11 +175,14 @@ class EdgeAnalysis:
     confidence_pct: int       # 0-100
     actionable: bool          # True for STRONG BET and BET only
 
+    # Factor rows (for report_formatter)
+    factors: List[FactorResult] = field(default_factory=list)
+
     # Metadata
-    polymarket_condition_id: str
-    polymarket_question: str
-    polymarket_liquidity: float
-    timestamp: datetime
+    polymarket_condition_id: str = ""
+    polymarket_question: str = ""
+    polymarket_liquidity: float = 0.0
+    timestamp: datetime = field(default_factory=datetime.now)
 
 
 # ============================================================================

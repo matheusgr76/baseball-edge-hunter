@@ -2,49 +2,70 @@
 Comparison Layer - Edge Detection
 Calculate edge per outcome and assign 5-tier signal.
 EdgeAnalysis is per-outcome (two per game: home + away).
+Accepts CanonicalGame (Phase 1) or CalibratedGame (Phase 2+).
 """
 
-from typing import List, Tuple
+from typing import List, Union
 from datetime import datetime
-from models import CanonicalGame, PolymarketOpportunity, EdgeAnalysis
+from models import CanonicalGame, CalibratedGame, PolymarketOpportunity, EdgeAnalysis
 import config
 
 
 def calculate_edge(
-    canonical: CanonicalGame,
+    game: Union[CanonicalGame, CalibratedGame],
     poly_home: PolymarketOpportunity,
     poly_away: PolymarketOpportunity,
 ) -> List[EdgeAnalysis]:
     """
     Calculate edge for both outcomes of a game.
 
-    In Phase 1, true_prob == consensus_prob (no calibration yet).
-    Phase 2 will pass a CalibratedGame with adjusted true probs.
+    Accepts either CanonicalGame (Phase 1, true_prob == consensus_prob) or
+    CalibratedGame (Phase 2+, true_prob reflects situational adjustments).
 
     Returns:
         [home_edge, away_edge] — always two EdgeAnalysis objects.
     """
+    if isinstance(game, CalibratedGame):
+        home_consensus = game.consensus_home_prob
+        away_consensus = game.consensus_away_prob
+        home_true = game.true_home_prob
+        away_true = game.true_away_prob
+        home_factors = game.home_factors
+        away_factors = game.away_factors
+        num_bookmakers = 0  # not carried on CalibratedGame; use 3 as default
+    else:
+        home_consensus = away_consensus = 0.0  # unused in Phase 1
+        home_true = game.home_prob
+        away_true = game.away_prob
+        home_consensus = game.home_prob
+        away_consensus = game.away_prob
+        home_factors = []
+        away_factors = []
+        num_bookmakers = game.num_bookmakers
+
     home_edge = _single_edge(
-        game_id=canonical.game_id,
+        game_id=game.game_id,
         team="home",
-        team_name=canonical.home_team,
-        opponent=canonical.away_team,
-        commence_time=canonical.commence_time,
-        consensus_prob=canonical.home_prob,
-        true_prob=canonical.home_prob,   # Phase 1: no calibration
+        team_name=game.home_team,
+        opponent=game.away_team,
+        commence_time=game.commence_time,
+        consensus_prob=home_consensus,
+        true_prob=home_true,
         poly=poly_home,
-        num_bookmakers=canonical.num_bookmakers,
+        num_bookmakers=num_bookmakers,
+        factors=home_factors,
     )
     away_edge = _single_edge(
-        game_id=canonical.game_id,
+        game_id=game.game_id,
         team="away",
-        team_name=canonical.away_team,
-        opponent=canonical.home_team,
-        commence_time=canonical.commence_time,
-        consensus_prob=canonical.away_prob,
-        true_prob=canonical.away_prob,   # Phase 1: no calibration
+        team_name=game.away_team,
+        opponent=game.home_team,
+        commence_time=game.commence_time,
+        consensus_prob=away_consensus,
+        true_prob=away_true,
         poly=poly_away,
-        num_bookmakers=canonical.num_bookmakers,
+        num_bookmakers=num_bookmakers,
+        factors=away_factors,
     )
     return [home_edge, away_edge]
 
@@ -59,6 +80,7 @@ def _single_edge(
     true_prob: float,
     poly: PolymarketOpportunity,
     num_bookmakers: int,
+    factors: list = None,
 ) -> EdgeAnalysis:
     edge_pp = round(true_prob - poly.polymarket_prob, 2)
     confidence_pct = _confidence(edge_pp, num_bookmakers)
@@ -78,6 +100,7 @@ def _single_edge(
         signal=signal,
         confidence_pct=confidence_pct,
         actionable=actionable,
+        factors=factors or [],
         polymarket_condition_id=poly.condition_id,
         polymarket_question=poly.question,
         polymarket_liquidity=poly.liquidity,
