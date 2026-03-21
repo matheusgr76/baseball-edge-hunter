@@ -32,27 +32,31 @@ baseball_edge_hunter/
 ├── main.py
 ├── requirements.txt
 ├── ingestion/
-│   ├── bookmakers.py        ✅
-│   └── polymarket.py        ✅
+│   ├── bookmakers.py        ✅ Phase 1
+│   ├── polymarket.py        ✅ Phase 1
+│   └── mlb_data.py          ✅ Phase 2 — SP (FIP) + bullpen usage
 ├── normalization/
-│   ├── devig.py             ✅
-│   └── teams.py             ✅
+│   ├── devig.py             ✅ Phase 1
+│   └── teams.py             ✅ Phase 1
+├── calibration/
+│   └── factors.py           ✅ Phase 2 — SP ±5pp, bullpen ±4pp, ±8pp cap
 ├── comparison/
-│   └── edge.py              ✅
+│   └── edge.py              ✅ Phase 1+2 — accepts CanonicalGame or CalibratedGame
 ├── orchestration/
-│   └── pipeline.py          ✅
+│   └── pipeline.py          ✅ Phase 1+2 — calibration step wired
 └── output/
-    └── report_formatter.py  ✅
+    └── report_formatter.py  ✅ Phase 1+2 — real factor rows
 ```
 
-**Pending first live-run verifications:**
+**Pending first live-run verifications (regular season ~April 1):**
 - Confirm Polymarket MLB slug format (`mlb-{away}-{home}-{date}`) resolves correctly
 - Confirm outcome ordering in Gamma API response (index 0 = home, 1 = away)
 - Verify Chicago/NY/LA abbreviations match actual Polymarket slugs (cws/chc, nyy/nym, lad/laa)
+- Verify `Athletics` team name in MLB Stats API (relocation: Oakland → Sacramento/Las Vegas)
 
 ---
 
-## Phase 2: Situational Calibration (IN PROGRESS)
+## Phase 2: Situational Calibration ✅ COMPLETE (2026-03-21)
 
 **Goal:** Add Tier 1 factors that adjust consensus before edge comparison.
 Calibration is additive to consensus, bounded at ±8pp total per team.
