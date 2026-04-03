@@ -148,6 +148,9 @@ class CalibratedGame:
 
     favorite: str = "home"
 
+    # Carried from CanonicalGame for confidence calculation in edge.py
+    num_bookmakers: int = 0
+
 
 # ============================================================================
 # COMPARISON DATA MODELS (Comparison Layer)

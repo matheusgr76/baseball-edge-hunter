@@ -174,8 +174,9 @@ def calibrate_game(
     home_total = _clamp(home_total_raw, -_TOTAL_CAP, _TOTAL_CAP)
     away_total = _clamp(away_total_raw, -_TOTAL_CAP, _TOTAL_CAP)
 
-    true_home = round(canonical.home_prob + home_total, 2)
-    true_away = round(canonical.away_prob + away_total, 2)
+    # Bug 3 fix: clamp to physical limits before renormalization
+    true_home = _clamp(round(canonical.home_prob + home_total, 2), 0.1, 99.9)
+    true_away = _clamp(round(canonical.away_prob + away_total, 2), 0.1, 99.9)
 
     # Re-normalize to keep sum = 100%
     total = true_home + true_away
@@ -212,6 +213,7 @@ def calibrate_game(
         home_factors=[sp_home_factor, bp_home_factor],
         away_factors=[sp_away_factor, bp_away_factor],
         favorite=favorite,
+        num_bookmakers=canonical.num_bookmakers,   # Bug 1 fix
     )
 
 

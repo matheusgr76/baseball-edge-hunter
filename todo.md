@@ -56,6 +56,20 @@
 
 ---
 
+## Phase 3d: Hotfix — First Live Run Bugs (2026-04-03) ✅
+
+> 2026-03-29 live run: 0 actionable signals. Root causes identified and fixed.
+
+- [x] **Bug 1 (CRITICAL):** Add `num_bookmakers: int = 0` to `CalibratedGame` in `models.py`
+- [x] **Bug 1 (CRITICAL):** Populate `num_bookmakers` from `CanonicalGame` in `calibration/factors.py`
+- [x] **Bug 1 (CRITICAL):** Use `game.num_bookmakers` in `comparison/edge.py` for `CalibratedGame`
+- [x] **Bug 2 (CRITICAL):** Filter stale/resolved markets in `ingestion/polymarket.py` (skip if `endDate < now` or any price > 0.99)
+- [x] **Bug 3 (MEDIUM):** Clamp probs to [0.1, 99.9] before renormalization in `calibration/factors.py`
+- [x] Run today's live pipeline — 2 actionable signals generated (NYM +5.80pp, SEA +3.43pp) ✅
+- [ ] Commit hotfix and push
+
+---
+
 ## Phase 4: Advanced Factors (Tier 2-3)
 - [ ] Umpire tendencies (scrape UmpScorecards.com)
 - [ ] wRC+ vs SP handedness (FanGraphs splits — needs auth workaround)

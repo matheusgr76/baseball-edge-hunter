@@ -54,6 +54,21 @@ def _fetch_raw_market(slug: str) -> Optional[RawPolymarketMarket]:
             print(f"  ⚠️  Skip {slug}: low liquidity (${liquidity:,.0f})")
         return None
 
+    # Bug 2 fix: skip markets that have already resolved
+    # Check 1: endDate already passed
+    end_date_str = market.get("endDate") or market.get("end_date_iso", "")
+    try:
+        end_date = datetime.fromisoformat(end_date_str.replace("Z", "+00:00"))
+        # Compare in UTC — both sides must be timezone-aware
+        from datetime import timezone
+        now_utc = datetime.now(timezone.utc)
+        if end_date < now_utc:
+            if config.DEBUG_MODE:
+                print(f"  ⚠️  Skip {slug}: market already resolved (endDate {end_date.date()})")
+            return None
+    except (ValueError, AttributeError):
+        end_date = datetime.now()
+
     # Parse outcomes (may be JSON string or list)
     outcomes_raw = market.get("outcomes", "[]")
     try:
@@ -69,11 +84,11 @@ def _fetch_raw_market(slug: str) -> Optional[RawPolymarketMarket]:
     except (json.JSONDecodeError, TypeError, ValueError):
         outcome_prices = []
 
-    end_date_str = market.get("endDate") or market.get("end_date_iso", "")
-    try:
-        end_date = datetime.fromisoformat(end_date_str.replace("Z", "+00:00"))
-    except (ValueError, AttributeError):
-        end_date = datetime.now()
+    # Check 2: any outcome price > 0.99 means market has essentially resolved
+    if outcome_prices and any(p > 0.99 for p in outcome_prices):
+        if config.DEBUG_MODE:
+            print(f"  ⚠️  Skip {slug}: market resolved (price={outcome_prices})")
+        return None
 
     return RawPolymarketMarket(
         condition_id=market.get("conditionId", ""),

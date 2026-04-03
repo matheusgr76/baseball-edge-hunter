@@ -32,7 +32,7 @@ def calculate_edge(
         away_true = game.true_away_prob
         home_factors = game.home_factors
         away_factors = game.away_factors
-        num_bookmakers = 0  # not carried on CalibratedGame; use 3 as default
+        num_bookmakers = game.num_bookmakers   # Bug 1 fix: was hardcoded to 0
     else:
         home_consensus = away_consensus = 0.0  # unused in Phase 1
         home_true = game.home_prob

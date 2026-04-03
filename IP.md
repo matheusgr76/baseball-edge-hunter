@@ -182,6 +182,34 @@ Step 10: print_clv_summary()
 
 ---
 
+## Phase 3d: Hotfix — First Live Run Bugs (2026-04-03)
+
+**Root cause:** 2026-03-29 live run produced 0 actionable signals due to 3 bugs:
+
+### Bug 1 — `num_bookmakers` not carried through calibration (CRITICAL)
+- `CalibratedGame` does not store `num_bookmakers`
+- `edge.py` hardcodes `0` when receiving a `CalibratedGame`
+- `_confidence()` base = 50%, never reaches 70%/80% thresholds for BET/STRONG BET
+- **Fix:** Add `num_bookmakers: int = 0` field to `CalibratedGame` in `models.py`; populate from `CanonicalGame` in `factors.py`; consume in `edge.py`
+
+### Bug 2 — Stale/resolved Polymarket markets bypass liquidity filter
+- Opening week markets (Tokyo series) had already resolved but still had high volume
+- Resulted in `polymarket_prob` near 0.05% → fictitious +85pp edges
+- **Fix:** In `polymarket.py`, skip markets where `endDate < now` OR any `outcomePrices` > 0.99 (resolved indicator)
+
+### Bug 3 — Probability values outside [0, 100]
+- Additive calibration on extreme favorites pushes probs past physical limits before renormalization
+- e.g., Tampa Bay Rays `true_prob: 101.08%`, St. Louis Cardinals `-1.08%`
+- **Fix:** Clamp each team's prob to [0.1, 99.9] in `calibrate_game()` before renormalization
+
+### Files modified:
+- `models.py` — add `num_bookmakers` to `CalibratedGame`
+- `calibration/factors.py` — pass `canonical.num_bookmakers` into `CalibratedGame`
+- `comparison/edge.py` — use `game.num_bookmakers` when game is `CalibratedGame`
+- `ingestion/polymarket.py` — filter resolved/stale markets
+
+---
+
 ## Phase 4: Advanced Factors (Tier 2-3)
 
 Each factor added individually, backtested before inclusion:

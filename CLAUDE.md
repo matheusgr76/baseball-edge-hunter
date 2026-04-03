@@ -211,3 +211,15 @@ Columns: `ROW_TYPE, GAME, FAVORITE, DOG, FACTOR, RESULT (%), EXPLANATION, DEVIL 
 - Log all API calls with timestamp and response status
 - Verify pipeline output before marking task complete
 - CLV (Closing Line Value) tracking from Phase 3 onward — this is the real validation metric
+
+## IMPORTANT
+- Add under a ## Debugging section at the top level of CLAUDE.md\n\nWhen debugging issues, ALWAYS
+read
+- the actual source code of relevant functions before diagnosing. Do not guess at root causes based
+on symptoms alone — trace the logic through the code first.
+- Add under a ## Workflow section in CLAUDE.md\n\nAfter completing code changes, always update
+relevant documentation files (todo.md, HANDOFF.md, IP.md, README.md) to reflect the current state of
+the project.
+- Add under a ## Git section in CLAUDE.md\n\nDefault git workflow: commit changes with descriptive
+messages, push to the current branch. Do not ask for confirmation on routine git operations unless
+the target branch is ambiguous.
