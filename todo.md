@@ -39,15 +39,9 @@
 - [x] Aggregate: `clv_summary()` → CLV% = % of signals that beat closing line
 - [x] **Target:** ≥55% CLV beat-rate over 100+ signals
 
-### 3b — Historical Backtest ✅ (2026-03-21)
-- [x] `backtesting/models.py` — `BacktestSignal`, `BacktestResult`, `BacktestSummary`, `GameResult`
-- [x] `backtesting/game_log_parser.py` — Retrosheet GL parser (2020–2025 from `past-seasons/`)
-- [x] `backtesting/historical_odds.py` — The Odds API historical endpoint (paid tier; free fallback)
-- [x] `backtesting/backtester.py` — core engine: devig replay → signal detection → resolve vs actual results
-- [x] `main.py` — `--backtest --season YYYY --max-dates N --spread X.X` CLI flags
-- [x] Track per signal: hit rate, ROI (pp), max drawdown, CLV beat-rate
-- [x] **Target:** Positive EV at 2.5pp threshold over ≥200 signal sample
-- Note: paid Odds API key required for true historical odds; free key will use live odds today as proxy
+### 3b — Historical Backtest ~~(removed 2026-04-04)~~
+- Deleted: backtesting folder and all associated CLI flags from main.py
+- Reason: historical Polymarket prices don't exist; backtest was simulating against bookmaker consensus, not Polymarket — a different question. CLV tracking on live runs is the real validation loop.
 
 ### 3c — Reporting ✅ (2026-03-21)
 - [x] Daily signal report persisted to `output/daily_report_{date}.txt`
@@ -70,59 +64,33 @@
 
 ---
 
-## Phase 3e: Backtest Hardening (branch: `hardening`) 🚧
+## Phase 3e: Backtest Hardening ~~(cancelled 2026-04-04)~~
+- Entire backtesting module deleted. B1–B5 are moot.
+- B4 (Sox collision in `ingestion/polymarket.py`) is a live pipeline bug — tracked separately below.
 
-> Codex code-review identified 5 logic bugs in the backtest engine. None affect the
-> live pipeline. All 5 must be fixed before backtest metrics can be trusted.
+### Structural tasks (carried forward)
+- [x] Cache `fetch_bullpen_status()` per `(team, date)` — module-level dict cache in `mlb_data.py`
+- [x] Add comment warning on WCS = `true_prob - 8.0` placeholder in `report_formatter.py`
+- [x] Fix Sox name collision in `_match_outcome_indices()` — full-name fallback + always-on warning log
 
-### Bug B1 (CRITICAL) — Poly spread breaks market constraint
-- **File:** `backtesting/backtester.py` lines 211–212
-- **Problem:** Subtracting `poly_spread_pp` from both home AND away poly prices simultaneously
-  violates the 100% market constraint. A positive spread manufactures synthetic edge on
-  both teams at once, making backtest ROI mechanically inflated.
-- **Fix:** Subtract spread from the target team only; set opponent poly = 100 - home_poly.
-- [ ] Fix `_build_signals_for_date()` — correct poly price construction
+---
 
-### Bug B2 (CRITICAL) — P&L settled off `true_prob` instead of `polymarket_prob`
-- **File:** `backtesting/backtester.py` lines 285–288
-- **Problem:** Win payout = `100 - true_prob` and loss = `-true_prob`. Correct formula:
-  win = `100 - polymarket_prob` (entry price paid), loss = `-polymarket_prob` (stake lost).
-  Wrong fill price → wrong ROI.
-- **Fix:** Replace `sig.true_prob` with `sig.polymarket_prob` in `_resolve_signals()`.
-- [ ] Fix `_resolve_signals()` — use `polymarket_prob` for win/loss P&L
+## Phase 4a: Signal Quality Improvements ✅ (2026-04-04)
 
-### Bug B3 (MEDIUM) — Doubleheaders not uniquely identified
-- **Files:** `backtesting/game_log_parser.py` line 151, `backtesting/backtester.py` line 178
-- **Problem:** Result lookup key = `(date, home, away)`. In a doubleheader, Game 2 silently
-  overwrites Game 1. Retrosheet `col[1]` holds the game number (0/1/2) and is ignored.
-  ~10–15 DH games/season are mis-resolved.
-- **Fix:** Include game number in `GameResult`, key lookup as `(date, home, away, game_num)`;
-  backtester groups by `(home, away, game_num)` from commence_time hour.
-- [ ] Update `GameResult` model to store `game_num`
-- [ ] Fix `build_result_lookup()` — add game_num to key
-- [ ] Fix `_build_signals_for_date()` — use commence_time hour to infer game_num
+### Fix 1 — Pinnacle-weighted consensus
+- **Files:** `config.py`, `normalization/devig.py`
+- **Problem:** All bookmakers weighted equally. DraftKings/FanDuel are recreational books with stale lines. Pinnacle is sharp and should dominate the consensus.
+- **Fix:** Add `pinnacle` to bookmaker feed. Introduce `SHARP_BOOKMAKERS` and `SHARP_BOOKMAKER_WEIGHT` in config. Weighted average in `calculate_consensus()`.
+- [x] Add `pinnacle` to `ODDS_BOOKMAKERS` in `config.py`
+- [x] Add `SHARP_BOOKMAKERS` list + `SHARP_BOOKMAKER_WEIGHT` multiplier to `config.py`
+- [x] Update `calculate_consensus()` in `devig.py` — weighted average by bookmaker sharpness
 
-### Bug B4 (LOW) — Sox name collision in outcome matching
-- **File:** `ingestion/polymarket.py` lines 177–190
-- **Problem:** `_match_outcome_indices` uses last word of team name (`"sox"` for both Red Sox
-  and White Sox). When they play each other, `home_idx == away_idx` → silent fallback to (0,1).
-- **Fix:** Fall back to full-name matching before the index fallback; log a warning with slug.
-- [ ] Fix `_match_outcome_indices()` — full-name fallback before (0,1) default
-
-### Bug B5 (CRITICAL) — CLV beat-rate is a tautology
-- **File:** `backtesting/backtester.py` lines 321–322
-- **Problem:** `clv_beat = [s for s in actionable if s.edge_pp > 0]`. All actionable signals
-  already have `edge_pp >= 2.5pp` by definition, so this always returns 100%. Meaningless.
-- **Fix:** Replace with real CLV metric: percentage of signals where our model prob >  
-  closing bookmaker implied prob. Requires storing closing line from Retrosheet/Odds API.
-  Short-term proxy: use `edge_pp > avg_edge_pp` to measure relative sharpness.
-- [ ] Replace tautological CLV with meaningful relative-sharpness metric
-
-### Structural tasks (from same review)
-- [ ] Cache `fetch_bullpen_status()` per `(team, date)` — currently called once per game in loop
-- [ ] Add comment warning on WCS = `true_prob - 8.0` placeholder in `report_formatter.py`
-
-### Gate: do not start Phase 4 until all B1–B5 are resolved.
+### Fix 2 — Lineup confirmation check ✅
+- **Files:** `ingestion/mlb_data.py`, `orchestration/pipeline.py`
+- **Problem:** Pipeline runs at 10 AM. A player scratched at noon is invisible to the model but visible to Polymarket immediately, creating a false edge.
+- **Fix:** Fetch lineup status from MLB Stats API schedule endpoint (hydrate=lineups). Flag games where lineup is not yet confirmed. Print warning in pipeline output before user acts on signal.
+- [x] Add `fetch_lineup_status(date_str)` to `mlb_data.py` — returns `{(home, away): bool}`
+- [x] Integrate in `pipeline.py` — fetch once, warn per game if lineup unconfirmed
 
 ---
 

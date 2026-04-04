@@ -10,7 +10,7 @@ from typing import List
 
 from ingestion.bookmakers import fetch_bookmaker_odds, get_unique_games
 from ingestion.polymarket import get_polymarket_odds
-from ingestion.mlb_data import fetch_probable_pitchers, fetch_bullpen_status
+from ingestion.mlb_data import fetch_probable_pitchers, fetch_bullpen_status, fetch_lineup_status
 from normalization.devig import calculate_consensus
 from normalization.teams import normalize_team_name
 from calibration.factors import calibrate_game
@@ -63,11 +63,14 @@ def run_pipeline() -> PipelineResult:
     unique_games = get_unique_games(raw_odds)
     print(f"  📋 {len(unique_games)} unique games found in bookmaker data")
 
-    # ── Step 2: Fetch MLB calibration data (SP + bullpen) ────────────────────
+    # ── Step 2: Fetch MLB calibration data (SP + bullpen + lineups) ─────────
     print()
     print("  🔍 Fetching MLB calibration data...")
     probable_pitchers = fetch_probable_pitchers(date_str)
     print(f"  ✓ Probable pitchers: {len(probable_pitchers)} teams with data")
+    lineup_status = fetch_lineup_status(date_str)
+    confirmed_count = sum(1 for v in lineup_status.values() if v)
+    print(f"  ✓ Lineup status: {confirmed_count}/{len(lineup_status)} games confirmed")
 
     # ── Step 3-6: Per-game processing ────────────────────────────────────────
     print()
@@ -105,6 +108,16 @@ def run_pipeline() -> PipelineResult:
                 home_bp=home_bp,
                 away_bp=away_bp,
             )
+
+            # Step 4b: Lineup confirmation warning
+            lineup_confirmed = lineup_status.get((home_canonical, away_canonical))
+            if lineup_confirmed is False:
+                msg = (
+                    f"  ⚠️  LINEUP NOT CONFIRMED: {away_canonical} @ {home_canonical} "
+                    "— verify before acting on any signal"
+                )
+                print(msg)
+                warnings.append(msg.strip())
 
             # Step 5: Polymarket gatekeeper
             result = get_polymarket_odds(

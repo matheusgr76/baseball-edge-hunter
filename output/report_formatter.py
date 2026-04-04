@@ -203,7 +203,7 @@ def export_csv(all_edges: List[EdgeAnalysis], output_dir: str = "output") -> str
             )
             fav = e.team_name if e.true_prob >= 50.0 else e.opponent
             dog = e.opponent if e.true_prob >= 50.0 else e.team_name
-            wcs = round(e.true_prob - 8.0, 1)
+            wcs = round(e.true_prob - 8.0, 1)  # NOTE: WCS placeholder — not a real worst-case model
 
             # HEADER
             writer.writerow([
@@ -254,7 +254,7 @@ def export_csv(all_edges: List[EdgeAnalysis], output_dir: str = "output") -> str
             )
             fav = e.team_name if e.true_prob >= 50.0 else e.opponent
             dog = e.opponent if e.true_prob >= 50.0 else e.team_name
-            wcs = round(e.true_prob - 8.0, 1)
+            wcs = round(e.true_prob - 8.0, 1)  # NOTE: WCS placeholder — not a real worst-case model
             writer.writerow([
                 i, game, fav, dog,
                 f"{e.true_prob:.2f}", e.confidence_pct, wcs,

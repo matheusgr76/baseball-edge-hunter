@@ -7,6 +7,7 @@ from typing import List, Tuple
 from datetime import datetime
 from models import RawBookmakerOdds, CanonicalGame
 from normalization.teams import normalize_team_name
+import config
 
 
 def american_to_probability(odds: int) -> float:
@@ -77,18 +78,22 @@ def calculate_consensus(
     devigged = []
     for bm, odds_list in by_bookmaker.items():
         try:
-            devigged.append(_devig_single_bookmaker(odds_list))
+            result = _devig_single_bookmaker(odds_list)
+            weight = (
+                config.SHARP_BOOKMAKER_WEIGHT
+                if bm in config.SHARP_BOOKMAKERS
+                else 1
+            )
+            devigged.append({**result, "weight": weight})
         except Exception as e:
             print(f"  ⚠️  Devig error for {bm}: {e}")
 
     if not devigged:
         raise ValueError(f"No valid bookmaker odds to devig for {away_team} @ {home_team}")
 
-    home_probs = [d["home_prob"] for d in devigged]
-    away_probs = [d["away_prob"] for d in devigged]
-
-    consensus_home = sum(home_probs) / len(home_probs)
-    consensus_away = sum(away_probs) / len(away_probs)
+    total_weight = sum(d["weight"] for d in devigged)
+    consensus_home = sum(d["home_prob"] * d["weight"] for d in devigged) / total_weight
+    consensus_away = sum(d["away_prob"] * d["weight"] for d in devigged) / total_weight
 
     # Final normalize (handles floating-point drift)
     total = consensus_home + consensus_away

@@ -17,7 +17,12 @@ ODDS_API_BASE: str = "https://api.the-odds-api.com/v4"
 ODDS_SPORT: str = "baseball_mlb"
 ODDS_REGIONS: str = "us"
 ODDS_MARKETS: str = "h2h"
-ODDS_BOOKMAKERS: str = "fanduel,draftkings,williamhill_us,betmgm,caesars"
+ODDS_BOOKMAKERS: str = "pinnacle,fanduel,draftkings,williamhill_us,betmgm,caesars"
+
+# Sharp books get higher weight in consensus calculation.
+# Pinnacle attracts professional money and closes efficiently.
+SHARP_BOOKMAKERS: list = ["pinnacle"]
+SHARP_BOOKMAKER_WEIGHT: int = 3   # Sharp books count 3x vs recreational books
 
 # Polymarket Gamma API
 GAMMA_API_BASE: str = "https://gamma-api.polymarket.com"

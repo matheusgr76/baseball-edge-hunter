@@ -15,6 +15,9 @@ _BASE = "https://statsapi.mlb.com/api/v1"
 _HEADERS = {"User-Agent": "mlb-edge-hunter/1.0"}
 _TIMEOUT = 10
 
+# Cache bullpen results per (team, date) to avoid duplicate API calls within a session
+_bullpen_cache: Dict[Tuple[str, str], BullpenStatus] = {}
+
 # League-average FIP baseline (~2025 MLB environment)
 _LEAGUE_AVG_FIP = 4.20
 _FIP_CONSTANT = 3.17  # Makes FIP scale to ERA; cancels in delta math
@@ -54,6 +57,60 @@ _TEAM_IDS: Dict[str, int] = {
     "Toronto Blue Jays": 141,
     "Washington Nationals": 120,
 }
+
+
+# ============================================================================
+# LINEUP CONFIRMATION
+# ============================================================================
+
+def fetch_lineup_status(date_str: str) -> Dict[tuple, bool]:
+    """
+    Check whether starting lineups have been posted for today's games.
+
+    MLB posts confirmed lineups ~90 minutes before first pitch. Running the
+    pipeline earlier means lineups may not yet be confirmed — a late scratch
+    of a key player after run time creates a false edge.
+
+    Returns:
+        Dict keyed by (home_canonical, away_canonical) → True if lineup confirmed
+        for BOTH teams, False if either lineup is missing.
+        Empty dict on API error (caller treats all games as unconfirmed).
+    """
+    url = f"{_BASE}/schedule"
+    params = {
+        "sportId": 1,
+        "date": date_str,
+        "hydrate": "lineups",
+    }
+
+    try:
+        r = requests.get(url, params=params, headers=_HEADERS, timeout=_TIMEOUT)
+        r.raise_for_status()
+        data = r.json()
+    except Exception as e:
+        print(f"  ⚠️  MLB Stats API (lineups) error: {e}")
+        return {}
+
+    status: Dict[tuple, bool] = {}
+    dates = data.get("dates", [])
+    if not dates:
+        return {}
+
+    for game in dates[0].get("games", []):
+        teams = game.get("teams", {})
+        home_raw = teams.get("home", {}).get("team", {}).get("name", "")
+        away_raw = teams.get("away", {}).get("team", {}).get("name", "")
+        home_canonical = normalize_team_name(home_raw)
+        away_canonical = normalize_team_name(away_raw)
+        if not home_canonical or not away_canonical:
+            continue
+
+        lineups = game.get("lineups", {})
+        home_confirmed = bool(lineups.get("homePlayers"))
+        away_confirmed = bool(lineups.get("awayPlayers"))
+        status[(home_canonical, away_canonical)] = home_confirmed and away_confirmed
+
+    return status
 
 
 # ============================================================================
@@ -214,7 +271,16 @@ def _parse_ip(ip_str: str) -> float:
 # BULLPEN AVAILABILITY
 # ============================================================================
 
-def fetch_bullpen_status(team_canonical: str, date_str: str) -> BullpenStatus:
+def fetch_bullpen_status(team_canonical: str, date_str: str) -> BullpenStatus:  # noqa: E501
+    cache_key = (team_canonical, date_str)
+    if cache_key in _bullpen_cache:
+        return _bullpen_cache[cache_key]
+    result = _fetch_bullpen_status_uncached(team_canonical, date_str)
+    _bullpen_cache[cache_key] = result
+    return result
+
+
+def _fetch_bullpen_status_uncached(team_canonical: str, date_str: str) -> BullpenStatus:
     """
     Estimate bullpen fatigue for a team by checking the top relievers'
     pitch counts across the last 2 days.

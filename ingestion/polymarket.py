@@ -135,9 +135,9 @@ def get_polymarket_odds(
 
     if home_idx is None or away_idx is None:
         # Fallback: assume index 0=home, 1=away (common Polymarket convention)
+        # Always log — silent fallback masks incorrect home/away assignment
         home_idx, away_idx = 0, 1
-        if config.DEBUG_MODE:
-            print(f"  ⚠️  Outcome matching fallback for {slug}: {outcomes}")
+        print(f"  ⚠️  Outcome matching failed for {slug}: using (0,1) fallback | outcomes={outcomes}")
 
     home_price = prices[home_idx] * 100  # Convert 0-1 → 0-100
     away_price = prices[away_idx] * 100
@@ -180,23 +180,51 @@ def _match_outcome_indices(
     away_canonical: str,
 ) -> Tuple[Optional[int], Optional[int]]:
     """
-    Match outcome names to home/away indices by partial name match.
-    Returns (home_idx, away_idx) or (None, None) if match fails.
+    Match outcome names to home/away indices.
+
+    Strategy (two passes):
+    1. Last-word match (fast path, works for all teams except Sox collision).
+    2. Full-name substring match (fallback for "Red Sox" vs "White Sox").
+
+    Returns (home_idx, away_idx) or (None, None) if both passes fail.
     """
-    home_idx = None
-    away_idx = None
+    def _last_word_match() -> Tuple[Optional[int], Optional[int]]:
+        h_idx = None
+        a_idx = None
+        home_key = home_canonical.lower().split()[-1]
+        away_key = away_canonical.lower().split()[-1]
+        for i, name in enumerate(outcomes):
+            nl = str(name).lower()
+            if home_key in nl and h_idx is None:
+                h_idx = i
+            elif away_key in nl and a_idx is None:
+                a_idx = i
+        return (None, None) if h_idx == a_idx else (h_idx, a_idx)
 
-    home_key = home_canonical.lower().split()[-1]  # last word (e.g. "dodgers")
-    away_key = away_canonical.lower().split()[-1]
+    def _full_name_match() -> Tuple[Optional[int], Optional[int]]:
+        h_idx = None
+        a_idx = None
+        home_key = home_canonical.lower()
+        away_key = away_canonical.lower()
+        for i, name in enumerate(outcomes):
+            nl = str(name).lower()
+            if home_key in nl and h_idx is None:
+                h_idx = i
+            elif away_key in nl and a_idx is None:
+                a_idx = i
+        return (None, None) if h_idx == a_idx else (h_idx, a_idx)
 
-    for i, name in enumerate(outcomes):
-        name_lower = str(name).lower()
-        if home_key in name_lower and home_idx is None:
-            home_idx = i
-        elif away_key in name_lower and away_idx is None:
-            away_idx = i
+    home_idx, away_idx = _last_word_match()
+    if home_idx is not None and away_idx is not None:
+        return home_idx, away_idx
 
-    if home_idx == away_idx:
-        return None, None
+    # Last-word collision (e.g. Red Sox vs White Sox) — try full name
+    home_idx, away_idx = _full_name_match()
+    if home_idx is not None and away_idx is not None:
+        print(
+            f"  ⚠️  Outcome matching: used full-name fallback for "
+            f"{home_canonical} vs {away_canonical} | outcomes={outcomes}"
+        )
+        return home_idx, away_idx
 
-    return home_idx, away_idx
+    return None, None
