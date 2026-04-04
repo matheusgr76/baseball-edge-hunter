@@ -66,7 +66,63 @@
 - [x] **Bug 2 (CRITICAL):** Filter stale/resolved markets in `ingestion/polymarket.py` (skip if `endDate < now` or any price > 0.99)
 - [x] **Bug 3 (MEDIUM):** Clamp probs to [0.1, 99.9] before renormalization in `calibration/factors.py`
 - [x] Run today's live pipeline — 2 actionable signals generated (NYM +5.80pp, SEA +3.43pp) ✅
-- [ ] Commit hotfix and push
+- [x] Commit hotfix and push
+
+---
+
+## Phase 3e: Backtest Hardening (branch: `hardening`) 🚧
+
+> Codex code-review identified 5 logic bugs in the backtest engine. None affect the
+> live pipeline. All 5 must be fixed before backtest metrics can be trusted.
+
+### Bug B1 (CRITICAL) — Poly spread breaks market constraint
+- **File:** `backtesting/backtester.py` lines 211–212
+- **Problem:** Subtracting `poly_spread_pp` from both home AND away poly prices simultaneously
+  violates the 100% market constraint. A positive spread manufactures synthetic edge on
+  both teams at once, making backtest ROI mechanically inflated.
+- **Fix:** Subtract spread from the target team only; set opponent poly = 100 - home_poly.
+- [ ] Fix `_build_signals_for_date()` — correct poly price construction
+
+### Bug B2 (CRITICAL) — P&L settled off `true_prob` instead of `polymarket_prob`
+- **File:** `backtesting/backtester.py` lines 285–288
+- **Problem:** Win payout = `100 - true_prob` and loss = `-true_prob`. Correct formula:
+  win = `100 - polymarket_prob` (entry price paid), loss = `-polymarket_prob` (stake lost).
+  Wrong fill price → wrong ROI.
+- **Fix:** Replace `sig.true_prob` with `sig.polymarket_prob` in `_resolve_signals()`.
+- [ ] Fix `_resolve_signals()` — use `polymarket_prob` for win/loss P&L
+
+### Bug B3 (MEDIUM) — Doubleheaders not uniquely identified
+- **Files:** `backtesting/game_log_parser.py` line 151, `backtesting/backtester.py` line 178
+- **Problem:** Result lookup key = `(date, home, away)`. In a doubleheader, Game 2 silently
+  overwrites Game 1. Retrosheet `col[1]` holds the game number (0/1/2) and is ignored.
+  ~10–15 DH games/season are mis-resolved.
+- **Fix:** Include game number in `GameResult`, key lookup as `(date, home, away, game_num)`;
+  backtester groups by `(home, away, game_num)` from commence_time hour.
+- [ ] Update `GameResult` model to store `game_num`
+- [ ] Fix `build_result_lookup()` — add game_num to key
+- [ ] Fix `_build_signals_for_date()` — use commence_time hour to infer game_num
+
+### Bug B4 (LOW) — Sox name collision in outcome matching
+- **File:** `ingestion/polymarket.py` lines 177–190
+- **Problem:** `_match_outcome_indices` uses last word of team name (`"sox"` for both Red Sox
+  and White Sox). When they play each other, `home_idx == away_idx` → silent fallback to (0,1).
+- **Fix:** Fall back to full-name matching before the index fallback; log a warning with slug.
+- [ ] Fix `_match_outcome_indices()` — full-name fallback before (0,1) default
+
+### Bug B5 (CRITICAL) — CLV beat-rate is a tautology
+- **File:** `backtesting/backtester.py` lines 321–322
+- **Problem:** `clv_beat = [s for s in actionable if s.edge_pp > 0]`. All actionable signals
+  already have `edge_pp >= 2.5pp` by definition, so this always returns 100%. Meaningless.
+- **Fix:** Replace with real CLV metric: percentage of signals where our model prob >  
+  closing bookmaker implied prob. Requires storing closing line from Retrosheet/Odds API.
+  Short-term proxy: use `edge_pp > avg_edge_pp` to measure relative sharpness.
+- [ ] Replace tautological CLV with meaningful relative-sharpness metric
+
+### Structural tasks (from same review)
+- [ ] Cache `fetch_bullpen_status()` per `(team, date)` — currently called once per game in loop
+- [ ] Add comment warning on WCS = `true_prob - 8.0` placeholder in `report_formatter.py`
+
+### Gate: do not start Phase 4 until all B1–B5 are resolved.
 
 ---
 
