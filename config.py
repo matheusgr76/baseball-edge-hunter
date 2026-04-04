@@ -29,6 +29,10 @@ GAMMA_API_BASE: str = "https://gamma-api.polymarket.com"
 POLYMARKET_SLUG_PREFIX: str = "mlb"   # e.g. mlb-nyy-bos-2026-04-01
 POLYMARKET_TIME_HORIZON_HOURS: int = 36   # MLB games can be afternoon/evening ET
 
+# Telegram Bot configuration
+TELEGRAM_BOT_TOKEN: str = os.getenv("TELEGRAM_BOT_TOKEN", "")
+TELEGRAM_CHAT_ID: str = os.getenv("TELEGRAM_CHAT_ID", "")
+
 # ============================================================================
 # NORMALIZATION SETTINGS
 # ============================================================================

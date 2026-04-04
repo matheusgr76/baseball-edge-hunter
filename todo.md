@@ -92,6 +92,16 @@
 - [x] Add `fetch_lineup_status(date_str)` to `mlb_data.py` — returns `{(home, away): bool}`
 - [x] Integrate in `pipeline.py` — fetch once, warn per game if lineup unconfirmed
 
+### Fix 3 — Outbound Telegram summary ✅ (2026-04-04)
+- **Files:** `config.py`, `orchestration/telegram_client.py`, `orchestration/pipeline.py`
+- **Problem:** MLB pipeline only printed to terminal / files. No push notification to the existing Telegram bot.
+- **Fix:** Port outbound-only Telegram delivery from `basketball_edge_hunter`. Send one final HTML summary after report/export/CLV steps complete.
+- [x] Add env-driven `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` to `config.py`
+- [x] Add safe Telegram client + MLB summary formatter in `orchestration/telegram_client.py`
+- [x] Integrate final Telegram send in `run_pipeline()` without changing core pipeline return behavior
+- [x] Gracefully skip send when Telegram credentials are absent
+- [x] Add unit tests for formatter, send wrapper, and pipeline notification hook
+
 ---
 
 ## Phase 4: Advanced Factors (Tier 2-3)

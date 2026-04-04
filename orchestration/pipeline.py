@@ -4,6 +4,7 @@ Entry point: run_pipeline()
 Flow: Bookmakers → Consensus → Calibration → Polymarket (gatekeeper) → Edge → Report + CSV
 """
 
+import logging
 import time
 from datetime import datetime
 from typing import List
@@ -29,7 +30,13 @@ from output.clv_tracker import (
     print_pnl_chart,
 )
 from models import EdgeAnalysis, PipelineResult
+from orchestration.telegram_client import (
+    format_telegram_message,
+    send_telegram_message,
+)
 import config
+
+logger = logging.getLogger(__name__)
 
 
 def run_pipeline() -> PipelineResult:
@@ -179,6 +186,11 @@ def run_pipeline() -> PipelineResult:
         f"{games_analyzed} games | {polymarket_markets_found} Polymarket markets | "
         f"{actionable_count} actionable edges"
     )
+
+    telegram_message = format_telegram_message(ranked_edges, warnings=warnings)
+    telegram_response = send_telegram_message(telegram_message)
+    if not telegram_response:
+        logger.info("Telegram summary skipped or failed after pipeline completion.")
 
     return PipelineResult(
         timestamp=timestamp,
