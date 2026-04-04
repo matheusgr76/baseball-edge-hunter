@@ -162,25 +162,42 @@ The output must replicate the basketball_edge_hunter report format. Two sections
   Calculated Probability: 62.4% | Analysis Confidence: (85%)
 ```
 
-### 2. Analysis summary table (terminal)
+### 2. Analysis summary table (terminal) — CANONICAL FORMAT (locked 2026-04-04)
+
+This format is locked to match basketball_edge_hunter exactly. Do not change column widths,
+separator style, prefix chars, or alignment without updating this spec.
+
 ```
-============================================================================================================
+======================================================================
   📊 ANALYSIS SUMMARY
-============================================================================================================
+======================================================================
 
-  GAME                                             | FAVORITE              | PROB  | CONF | WCS  | SIGNAL        | MARKET | EDGE
-  -------------------------------------------------+------------------------+-------+------+------+---------------+--------+-------
-  New York Mets @ Los Angeles Dodgers              | Los Angeles Dodgers   | 62.4% |  85% | 54.1 | 🔥 Strong Bet |  58.5% | +3.90%
-  Chicago Cubs @ San Francisco Giants              | San Francisco Giants  | 55.1% |  72% | 48.3 | ✅ Bet        |  53.8% | +1.30%
-  Atlanta Braves @ San Diego Padres                | San Diego Padres      | 52.3% |  65% | 44.8 | ⏭️ Skip       |  51.9% | +0.40%
-  Houston Astros @ Seattle Mariners                | Houston Astros        | 57.8% |  78% | 50.2 | 👎 Fade       |  60.1% | -2.30%
-
-  🎯 ACTIONABLE EDGES: 2 found
-     🔥 Los Angeles Dodgers — Edge: +3.90pp | Prob: 62.4% | Confidence: 85% → Strong Bet
-     ✅ San Francisco Giants — Edge: +1.30pp | Prob: 55.1% | Confidence: 72% → Bet
-
-  Signal legend: 🔥 Strong Bet (≥3.0pp+conf≥80%) | ✅ Bet (≥2.5pp+conf≥70%) | ⏭️ Skip (<2.5pp) | 👎 Fade (-1 to -3pp) | 🚫 AVOID (<-3pp)
+   GAME     | FAV   | T% | P% | C% |   E   | VERDICT
+   --------+-------+----+----+----+-------+-----------
+- PHX@CHA   | CHA   | 50 | 66 | 71 | -17.0 | AVOID     ⛔️
++ MIN@DET   | DET   | 71 | 60 | 81 | +10.3 | BET       ✅
+  LAL@OKC   | OKC   | 76 | 76 | 78 |  +0.1 | SKIP      🔶
 ```
+
+**Column spec (MUST NOT change):**
+- Prefix: 1 char (`+` BET/STRONG BET, `-` FADE/AVOID, ` ` SKIP) + 1 space
+- GAME: `<9` (abbr@abbr, e.g. `NYM@LAD  `)  ← data uses `<9` to align with 3-space header prefix
+- FAV: `<5` (canonical abbreviation)
+- T%, P%, C%: `>2` (integer percentage, no % sign)
+- E: `>+5.1f` (signed float, e.g. `+10.3`, ` -3.1`)
+- E header: `^5` (centered — matches basketball brand)
+- VERDICT: `<10` + space + icon emoji
+- Separator: `   {'-'*8}+{'-'*7}+{'-'*4}+{'-'*4}+{'-'*4}+{'-'*7}+-----------`
+  Produces: `   --------+-------+----+----+----+-------+-----------`
+
+**Prefix/icon mapping:**
+| Signal     | Prefix | Icon |
+|------------|--------|------|
+| STRONG BET | `+`    | ✅   |
+| BET        | `+`    | ✅   |
+| SKIP       | ` `    | 🔶   |
+| FADE       | `-`    | 🔄   |
+| AVOID      | `-`    | ⛔️   |
 
 ### 3. CSV export
 Same structure as basketball_edge_hunter: ROW_TYPE (HEADER/FACTOR/SUMMARY), one row per factor per game.
@@ -197,7 +214,8 @@ Columns: `ROW_TYPE, GAME, FAVORITE, DOG, FACTOR, RESULT (%), EXPLANATION, DEVIL 
 - Actionable = Strong Bet + Bet only (listed under 🎯)
 - No-signal fallback: `⏳ No actionable edges today...`
 - Include signal legend at bottom of summary
-- `tabulate` library for alignment
+- Summary table column widths are locked — see canonical format spec above
+- E header must be centered (`^5`), GAME data rows must use `<9` (not `<8`)
 
 ## Dev environment
 - Python 3.x

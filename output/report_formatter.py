@@ -130,14 +130,14 @@ def print_session_summary(all_edges: List[EdgeAnalysis]) -> None:
     print("  📊 ANALYSIS SUMMARY")
     print("=" * 78)
     print()
-    print(f"   {'GAME':<8} | {'FAV':<5} | {'T%':>2} | {'P%':>2} | {'C%':>2} | {'E':>5} | VERDICT")
-    print(f"   {'-'*8}-+-{'-'*5}-+-{'-'*2}-+-{'-'*2}-+-{'-'*2}-+-{'-'*5}-+-{'-'*11}")
+    print(f"   {'GAME':<8} | {'FAV':<5} | {'T%':>2} | {'P%':>2} | {'C%':>2} | {'E':^5} | VERDICT")
+    print(f"   {'-'*8}+{'-'*7}+{'-'*4}+{'-'*4}+{'-'*4}+{'-'*7}+-----------")
 
     actionable: List[Dict[str, object]] = []
 
     for row in summary_rows:
         print(
-            f"{row['prefix']} {row['game']:<8} | {row['fav']:<5} | "
+            f"{row['prefix']} {row['game']:<9} | {row['fav']:<5} | "
             f"{row['true_pct']:>2} | {row['poly_pct']:>2} | {row['conf_pct']:>2} | "
             f"{row['edge']:>+5.1f} | {row['verdict']:<10} {row['icon']}"
         )
@@ -296,14 +296,14 @@ def save_daily_report(
         "  📊 ANALYSIS SUMMARY",
         "=" * 78,
         "",
-        f"   {'GAME':<8} | {'FAV':<5} | {'T%':>2} | {'P%':>2} | {'C%':>2} | {'E':>5} | VERDICT",
-        f"   {'-'*8}-+-{'-'*5}-+-{'-'*2}-+-{'-'*2}-+-{'-'*2}-+-{'-'*5}-+-{'-'*11}",
+        f"   {'GAME':<8} | {'FAV':<5} | {'T%':>2} | {'P%':>2} | {'C%':>2} | {'E':^5} | VERDICT",
+        f"   {'-'*8}+{'-'*7}+{'-'*4}+{'-'*4}+{'-'*4}+{'-'*7}+-----------",
     ]
 
     actionable = []
     for row in summary_rows:
         lines.append(
-            f"{row['prefix']} {row['game']:<8} | {row['fav']:<5} | "
+            f"{row['prefix']} {row['game']:<9} | {row['fav']:<5} | "
             f"{row['true_pct']:>2} | {row['poly_pct']:>2} | {row['conf_pct']:>2} | "
             f"{row['edge']:>+5.1f} | {row['verdict']:<10} {row['icon']}"
         )
