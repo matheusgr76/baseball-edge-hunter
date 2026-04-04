@@ -7,7 +7,7 @@ Sport emoji: ⚾  |  Signal column: SIGNAL  |  Summary title: ANALYSIS SUMMARY
 import csv
 import os
 from datetime import datetime
-from typing import List
+from typing import Dict, List
 
 from models import EdgeAnalysis, FactorResult
 
@@ -26,6 +26,14 @@ _SIGNAL_LEGEND = (
     "Signal legend: 🔥 Strong Bet (≥3.0pp+conf≥80%) | ✅ Bet (≥2.5pp+conf≥70%) | "
     "⏭️ Skip (<2.5pp) | 👎 Fade (-1 to -3pp) | 🚫 AVOID (<-3pp)"
 )
+
+_VERDICT_ICON = {
+    "STRONG BET": "🔥",
+    "BET":        "✅",
+    "SKIP":       "🔶",
+    "FADE":       "🔄",
+    "AVOID":      "⛔️",
+}
 
 # Phase 1 placeholder factor (no calibration yet)
 _PLACEHOLDER_FACTOR = FactorResult(
@@ -112,59 +120,41 @@ def print_game_section(
 
 def print_session_summary(all_edges: List[EdgeAnalysis]) -> None:
     """
-    Print the final ANALYSIS SUMMARY table with one row per outcome per game,
-    then the actionable callout section and signal legend.
+    Print the final ANALYSIS SUMMARY table in the compact basketball-style format.
+    One row per game, using the favorite-side analysis.
     """
+    summary_rows = _build_summary_rows(all_edges)
+
     print()
-    print("=" * 140)
+    print("=" * 78)
     print("  📊 ANALYSIS SUMMARY")
-    print("=" * 140)
+    print("=" * 78)
     print()
+    print(f"   {'GAME':<8} | {'FAV':<5} | {'T%':>2} | {'P%':>2} | {'C%':>2} | {'E':>5} | VERDICT")
+    print(f"   {'-'*8}-+-{'-'*5}-+-{'-'*2}-+-{'-'*2}-+-{'-'*2}-+-{'-'*5}-+-{'-'*11}")
 
-    # Table header
-    print(
-        f"  {'GAME':<50} | {'FAVORITE':<25} | {'PROB':>5} | "
-        f"{'CONF':>4} | {'WCS':>5} | {'SIGNAL':<14} | {'MARKET':>6} | {'EDGE':>7}"
-    )
-    print(
-        f"  {'-'*50}-+-{'-'*25}-+-{'-'*5}-+-"
-        f"{'-'*4}-+-{'-'*5}-+-{'-'*14}-+-{'-'*6}-+-{'-'*7}"
-    )
+    actionable: List[Dict[str, object]] = []
 
-    actionable: List[EdgeAnalysis] = []
-
-    for e in all_edges:
-        game = f"{e.opponent} @ {e.team_name}" if e.team == "home" else f"{e.team_name} @ {e.opponent}"
-        fav_name = e.team_name if e.true_prob >= 50.0 else e.opponent
-        wcs = round(e.true_prob - 8.0, 1)  # Phase 1 WCS placeholder
-        signal_display = _SIGNAL_EMOJI.get(e.signal, e.signal)
-
-        game_trunc = game[:47] + "..." if len(game) > 50 else game
-        fav_trunc = fav_name[:22] + "..." if len(fav_name) > 25 else fav_name
-
+    for row in summary_rows:
         print(
-            f"  {game_trunc:<50} | {fav_trunc:<25} | "
-            f"{e.true_prob:>4.1f}% | {e.confidence_pct:>3}% | "
-            f"{wcs:>4.1f} | {signal_display:<14} | "
-            f"{e.polymarket_prob:>5.1f}% | {e.edge_pp:>+6.2f}%"
+            f"{row['prefix']} {row['game']:<8} | {row['fav']:<5} | "
+            f"{row['true_pct']:>2} | {row['poly_pct']:>2} | {row['conf_pct']:>2} | "
+            f"{row['edge']:>+5.1f} | {row['verdict']:<10} {row['icon']}"
         )
-
-        if e.actionable:
-            actionable.append(e)
+        if row["signal"] in ("STRONG BET", "BET"):
+            actionable.append(row)
 
     print()
-    print("=" * 140)
+    print("=" * 78)
     print()
 
-    # Actionable callout
     if actionable:
         print(f"  🎯 ACTIONABLE EDGES: {len(actionable)} found")
-        for e in actionable:
-            emoji = "🔥" if e.signal == "STRONG BET" else "✅"
+        for row in actionable:
             print(
-                f"     {emoji} {e.team_name} — Edge: {e.edge_pp:+.2f}pp "
-                f"| Prob: {e.true_prob:.1f}% | Confidence: {e.confidence_pct}% "
-                f"→ {e.signal}"
+                f"     {row['fav_full']} — Edge: {row['edge']:+.2f}pp "
+                f"| T={row['true_pct']}% P={row['poly_pct']}% C={row['conf_pct']}% "
+                f"→ {row['verdict']} {row['icon']}"
             )
     else:
         print("  ⏳ No actionable edges today...")
@@ -295,44 +285,40 @@ def save_daily_report(
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     filepath = os.path.join(output_dir, f"daily_report_{date_str}.txt")
 
+    summary_rows = _build_summary_rows(all_edges)
+
     lines = [
         "╔" + "═" * 108 + "╗",
         "║" + f"  ⚾  MLB EDGE HUNTER — DAILY SIGNAL REPORT  |  {now_str}".ljust(108) + "║",
         "╚" + "═" * 108 + "╝",
         "",
-        "=" * 140,
+        "=" * 78,
         "  📊 ANALYSIS SUMMARY",
-        "=" * 140,
+        "=" * 78,
         "",
-        f"  {'GAME':<50} | {'FAVORITE':<25} | {'PROB':>5} | "
-        f"{'CONF':>4} | {'WCS':>5} | {'SIGNAL':<14} | {'MARKET':>6} | {'EDGE':>7}",
-        f"  {'-'*50}-+-{'-'*25}-+-{'-'*5}-+-{'-'*4}-+-{'-'*5}-+-{'-'*14}-+-{'-'*6}-+-{'-'*7}",
+        f"   {'GAME':<8} | {'FAV':<5} | {'T%':>2} | {'P%':>2} | {'C%':>2} | {'E':>5} | VERDICT",
+        f"   {'-'*8}-+-{'-'*5}-+-{'-'*2}-+-{'-'*2}-+-{'-'*2}-+-{'-'*5}-+-{'-'*11}",
     ]
 
     actionable = []
-    for e in all_edges:
-        game = f"{e.opponent} @ {e.team_name}" if e.team == "home" else f"{e.team_name} @ {e.opponent}"
-        fav = e.team_name if e.true_prob >= 50.0 else e.opponent
-        wcs = round(e.true_prob - 8.0, 1)
-        sig = _SIGNAL_EMOJI.get(e.signal, e.signal)
-        g = game[:47] + "..." if len(game) > 50 else game
-        f_ = fav[:22] + "..." if len(fav) > 25 else fav
+    for row in summary_rows:
         lines.append(
-            f"  {g:<50} | {f_:<25} | {e.true_prob:>4.1f}% | {e.confidence_pct:>3}% | "
-            f"{wcs:>4.1f} | {sig:<14} | {e.polymarket_prob:>5.1f}% | {e.edge_pp:>+6.2f}%"
+            f"{row['prefix']} {row['game']:<8} | {row['fav']:<5} | "
+            f"{row['true_pct']:>2} | {row['poly_pct']:>2} | {row['conf_pct']:>2} | "
+            f"{row['edge']:>+5.1f} | {row['verdict']:<10} {row['icon']}"
         )
-        if e.actionable:
-            actionable.append(e)
+        if row["signal"] in ("STRONG BET", "BET"):
+            actionable.append(row)
 
-    lines += ["", "=" * 140, ""]
+    lines += ["", "=" * 78, ""]
 
     if actionable:
         lines.append(f"  🎯 ACTIONABLE EDGES: {len(actionable)} found")
-        for e in actionable:
-            emoji = "🔥" if e.signal == "STRONG BET" else "✅"
+        for row in actionable:
             lines.append(
-                f"     {emoji} {e.team_name} — Edge: {e.edge_pp:+.2f}pp "
-                f"| Prob: {e.true_prob:.1f}% | Confidence: {e.confidence_pct}% → {e.signal}"
+                f"     {row['fav_full']} — Edge: {row['edge']:+.2f}pp "
+                f"| T={row['true_pct']}% P={row['poly_pct']}% C={row['conf_pct']}% "
+                f"→ {row['verdict']} {row['icon']}"
             )
     else:
         lines.append("  ⏳ No actionable edges today...")
@@ -344,3 +330,66 @@ def save_daily_report(
 
     print(f"  📄 Daily report saved: {filepath}")
     return filepath
+
+
+def _build_summary_rows(all_edges: List[EdgeAnalysis]) -> List[Dict[str, object]]:
+    """
+    Collapse per-outcome edges into one row per game, showing the favorite side.
+    Deduplicates by canonical game key (away@home) so the same matchup never
+    appears twice even if both outcome edges are in the list.
+    """
+    # First group by game_id to pair home + away edges
+    games: Dict[str, List[EdgeAnalysis]] = {}
+    for edge in all_edges:
+        games.setdefault(edge.game_id, []).append(edge)
+
+    # Deduplicate by canonical matchup label (away_abbr@home_abbr) — keeps
+    # the version with the higher |edge_pp| when duplicates exist.
+    seen_matchups: Dict[str, Dict[str, object]] = {}
+
+    for game_edges in games.values():
+        fav_edge = max(game_edges, key=lambda e: e.true_prob)
+        away_edge = next((e for e in game_edges if e.team == "away"), fav_edge)
+        home_edge = next((e for e in game_edges if e.team == "home"), fav_edge)
+
+        matchup_key = f"{_abbr(away_edge.team_name)}@{_abbr(home_edge.team_name)}"
+        verdict = _verdict_label(fav_edge.signal)
+        row = {
+            "game": matchup_key,
+            "fav": _abbr(fav_edge.team_name),
+            "fav_full": fav_edge.team_name,
+            "true_pct": int(round(fav_edge.true_prob)),
+            "poly_pct": int(round(fav_edge.polymarket_prob)),
+            "conf_pct": int(round(fav_edge.confidence_pct)),
+            "edge": round(fav_edge.edge_pp, 1),
+            "signal": fav_edge.signal,
+            "verdict": verdict,
+            "icon": _VERDICT_ICON.get(fav_edge.signal, ""),
+            "prefix": _row_prefix(verdict),
+            "commence_time": fav_edge.commence_time,
+        }
+
+        existing = seen_matchups.get(matchup_key)
+        if existing is None or abs(row["edge"]) > abs(existing["edge"]):
+            seen_matchups[matchup_key] = row
+
+    return sorted(seen_matchups.values(), key=lambda r: (r["commence_time"], r["game"]))
+
+
+def _abbr(team_name: str) -> str:
+    from normalization.teams import get_polymarket_abbr
+
+    return get_polymarket_abbr(team_name).upper()
+
+
+def _verdict_label(signal: str) -> str:
+    # Keep STRONG BET as distinct from BET for prefix/icon logic
+    return signal
+
+
+def _row_prefix(verdict: str) -> str:
+    if verdict in ("STRONG BET", "BET"):
+        return "+"
+    if verdict in ("AVOID", "FADE"):
+        return "-"
+    return " "
