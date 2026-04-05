@@ -214,6 +214,7 @@ def calibrate_game(
         away_factors=[sp_away_factor, bp_away_factor],
         favorite=favorite,
         num_bookmakers=canonical.num_bookmakers,   # Bug 1 fix
+        bookmaker_std_pp=canonical.bookmaker_std_pp,
     )
 
 

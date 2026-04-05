@@ -53,11 +53,19 @@ BET_CONF_PCT: int = 70
 FADE_MIN_PP: float = -1.0     # Edge <= -1.0 enters fade territory
 AVOID_THRESHOLD_PP: float = -3.0   # Edge < -3.0 → AVOID
 
+# Edge-floor guards (proactive, based on basketball edge hunter 19W/5L analysis).
+# Basketball losses clustered in the 56-72% market-prob band with thin edges.
+# MLB-calibrated thresholds: MLB favorites rarely exceed 65%, so bands are tighter.
+MODERATE_FAV_BAND: tuple = (0.55, 0.65)     # Polymarket implied prob range (decimal)
+MODERATE_FAV_MIN_EDGE: float = 3.5          # pp edge required to BET inside this band
+HIGH_CONF_THRESHOLD: float = 0.65           # Above this, payout risk grows (rare in MLB)
+HIGH_CONF_MIN_EDGE: float = 5.0             # pp edge required to BET above this threshold
+
 # ============================================================================
 # PIPELINE SETTINGS
 # ============================================================================
 
-MIN_POLYMARKET_LIQUIDITY: float = 500.0   # MLB markets thinner than NBA
+MIN_POLYMARKET_LIQUIDITY: float = 750.0   # Raised from $500: thin markets have stale prices
 MIN_BOOKMAKERS: int = 2                   # Minimum books to form consensus
 
 REQUEST_TIMEOUT: int = 10

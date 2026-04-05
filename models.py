@@ -66,7 +66,8 @@ class CanonicalGame:
 
     favorite: str         # "home" or "away"
     num_bookmakers: int
-    raw_sources: List[RawBookmakerOdds]
+    bookmaker_std_pp: float = 0.0   # Std dev of devigged home probs across books (pp)
+    raw_sources: List[RawBookmakerOdds] = field(default_factory=list)
 
 
 @dataclass
@@ -150,6 +151,7 @@ class CalibratedGame:
 
     # Carried from CanonicalGame for confidence calculation in edge.py
     num_bookmakers: int = 0
+    bookmaker_std_pp: float = 0.0   # Std dev of devigged probs across books
 
 
 # ============================================================================

@@ -3,6 +3,7 @@ Normalization Layer - Devig
 Convert American odds to fair probabilities using multiplicative devig
 """
 
+import math
 from typing import List, Tuple
 from datetime import datetime
 from models import RawBookmakerOdds, CanonicalGame
@@ -103,6 +104,16 @@ def calculate_consensus(
     favorite = "home" if consensus_home >= consensus_away else "away"
     game_id = f"{home_team}_{away_team}_{commence_time.strftime('%Y%m%d_%H%M')}"
 
+    # Bookmaker variance: std dev of devigged home probs across books (unweighted).
+    # High variance = books disagree = lower confidence in consensus.
+    home_probs = [d["home_prob"] for d in devigged]
+    if len(home_probs) >= 2:
+        mean_hp = sum(home_probs) / len(home_probs)
+        variance = sum((p - mean_hp) ** 2 for p in home_probs) / len(home_probs)
+        bm_std_pp = round(math.sqrt(variance), 2)
+    else:
+        bm_std_pp = 0.0
+
     return CanonicalGame(
         game_id=game_id,
         home_team=normalize_team_name(home_team),
@@ -112,5 +123,6 @@ def calculate_consensus(
         away_prob=consensus_away,
         favorite=favorite,
         num_bookmakers=len(devigged),
+        bookmaker_std_pp=bm_std_pp,
         raw_sources=raw_odds,
     )

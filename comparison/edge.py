@@ -33,6 +33,7 @@ def calculate_edge(
         home_factors = game.home_factors
         away_factors = game.away_factors
         num_bookmakers = game.num_bookmakers   # Bug 1 fix: was hardcoded to 0
+        bm_std_pp = game.bookmaker_std_pp
     else:
         home_consensus = away_consensus = 0.0  # unused in Phase 1
         home_true = game.home_prob
@@ -42,6 +43,7 @@ def calculate_edge(
         home_factors = []
         away_factors = []
         num_bookmakers = game.num_bookmakers
+        bm_std_pp = game.bookmaker_std_pp
 
     home_edge = _single_edge(
         game_id=game.game_id,
@@ -54,6 +56,7 @@ def calculate_edge(
         poly=poly_home,
         num_bookmakers=num_bookmakers,
         factors=home_factors,
+        bm_std_pp=bm_std_pp,
     )
     away_edge = _single_edge(
         game_id=game.game_id,
@@ -66,6 +69,7 @@ def calculate_edge(
         poly=poly_away,
         num_bookmakers=num_bookmakers,
         factors=away_factors,
+        bm_std_pp=bm_std_pp,
     )
     return [home_edge, away_edge]
 
@@ -81,10 +85,11 @@ def _single_edge(
     poly: PolymarketOpportunity,
     num_bookmakers: int,
     factors: list = None,
+    bm_std_pp: float = 0.0,
 ) -> EdgeAnalysis:
     edge_pp = round(true_prob - poly.polymarket_prob, 2)
-    confidence_pct = _confidence(edge_pp, num_bookmakers)
-    signal = _assign_signal(edge_pp, confidence_pct)
+    confidence_pct = _confidence(edge_pp, num_bookmakers, factors, bm_std_pp)
+    signal = _assign_signal(edge_pp, confidence_pct, poly.polymarket_prob)
     actionable = signal in ("STRONG BET", "BET")
 
     return EdgeAnalysis(
@@ -108,7 +113,7 @@ def _single_edge(
     )
 
 
-def _assign_signal(edge_pp: float, confidence_pct: int) -> str:
+def _assign_signal(edge_pp: float, confidence_pct: int, polymarket_prob: float = 0.0) -> str:
     """
     Assign 5-tier signal based on edge and confidence.
 
@@ -118,24 +123,56 @@ def _assign_signal(edge_pp: float, confidence_pct: int) -> str:
         SKIP        — edge in [-1.0, 2.5)   (insufficient or no edge)
         FADE        — edge in [-3.0, -1.0)  (market overpriced on Polymarket)
         AVOID       — edge < -3.0           (strong negative edge)
+
+    Edge-floor guards (proactive, from basketball 19W/5L analysis):
+        Moderate favorite band (55-65%): requires >= 3.5pp edge
+        High confidence zone (>65%): requires >= 5.0pp edge
     """
     if edge_pp >= config.STRONG_BET_EDGE_PP and confidence_pct >= config.STRONG_BET_CONF_PCT:
-        return "STRONG BET"
-    if edge_pp >= config.BET_EDGE_PP and confidence_pct >= config.BET_CONF_PCT:
-        return "BET"
-    if edge_pp < config.AVOID_THRESHOLD_PP:
+        signal = "STRONG BET"
+    elif edge_pp >= config.BET_EDGE_PP and confidence_pct >= config.BET_CONF_PCT:
+        signal = "BET"
+    elif edge_pp < config.AVOID_THRESHOLD_PP:
         return "AVOID"
-    if edge_pp < config.FADE_MIN_PP:
+    elif edge_pp < config.FADE_MIN_PP:
         return "FADE"
-    return "SKIP"
+    else:
+        return "SKIP"
+
+    # --- Edge-floor guards ---
+    # Learned from basketball: moderate favorites with thin edges are the loss zone.
+    # Downgrade actionable signals to SKIP when cushion is too thin.
+    market_prob_dec = polymarket_prob / 100.0
+    in_moderate_band = (config.MODERATE_FAV_BAND[0]
+                        <= market_prob_dec
+                        <= config.MODERATE_FAV_BAND[1])
+    if in_moderate_band and edge_pp < config.MODERATE_FAV_MIN_EDGE:
+        return "SKIP"
+
+    if market_prob_dec > config.HIGH_CONF_THRESHOLD and edge_pp < config.HIGH_CONF_MIN_EDGE:
+        return "SKIP"
+
+    return signal
 
 
-def _confidence(edge_pp: float, num_bookmakers: int) -> int:
+def _confidence(
+    edge_pp: float,
+    num_bookmakers: int,
+    factors: list = None,
+    bm_std_pp: float = 0.0,
+) -> int:
     """
-    Derive confidence percentage from edge magnitude and bookmaker count.
+    Derive confidence percentage from edge magnitude, bookmaker count,
+    factor agreement, data completeness, and bookmaker variance.
 
-    Bookmaker count increases confidence (more data = more reliable consensus).
-    Edge magnitude also boosts confidence.
+    Components:
+        1. Base: 50
+        2. Bookmaker count bonus: +6/+12/+20 (more books = sharper consensus)
+        3. Edge magnitude bonus: +3/+6/+10/+15
+        4. Factor agreement: +5 if SP & bullpen agree, -5 if they conflict
+        5. Data completeness: -5 per missing factor (SP or bullpen)
+        6. Bookmaker variance: -5 if std dev > 3pp (books disagree on price)
+
     Capped at 95% — no model is perfect.
     """
     base = 50
@@ -159,7 +196,28 @@ def _confidence(edge_pp: float, num_bookmakers: int) -> int:
     elif abs_edge >= 1.0:
         base += 3
 
-    return min(base, 95)
+    # Factor agreement + data completeness (requires factors list)
+    if factors:
+        nonzero_factors = [f for f in factors if f.result != 0.0]
+        missing_count = len(factors) - len(nonzero_factors)
+
+        # Data completeness penalty: -5 per missing factor
+        base -= missing_count * 5
+
+        # Factor agreement: do all nonzero factors point the same direction?
+        if len(nonzero_factors) >= 2:
+            positive = sum(1 for f in nonzero_factors if f.result > 0)
+            negative = len(nonzero_factors) - positive
+            if positive == len(nonzero_factors) or negative == len(nonzero_factors):
+                base += 5   # All factors agree → boost
+            else:
+                base -= 5   # Factors conflict → penalty
+
+    # Bookmaker variance penalty: books disagree on the true price
+    if bm_std_pp > 3.0:
+        base -= 5
+
+    return max(40, min(base, 95))
 
 
 def filter_actionable(edges: List[EdgeAnalysis]) -> List[EdgeAnalysis]:
