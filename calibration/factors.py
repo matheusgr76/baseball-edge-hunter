@@ -2,14 +2,22 @@
 Calibration Layer - Factors
 Apply situational adjustments to devigged consensus probabilities.
 Phase 2 Tier 1: SP quality + bullpen availability.
-Reliability pass (2026-04-17): reduced factor aggressiveness to limit false positives.
+Phase 4: park, handedness split, pythagorean regression, OAA, umpire tendency.
+Reliability pass (2026-04-17): conservative caps to limit false positives.
 Total adjustment capped at ±6pp per team.
 """
 
-from typing import Optional, Tuple
+from typing import Dict, Optional, Tuple
 from models import (
     CanonicalGame, CalibratedGame, AdjustmentBreakdown,
     FactorResult, ProbablePitcher, BullpenStatus,
+)
+from calibration.phase4 import (
+    oaa_defense_factor,
+    park_factor,
+    pythagorean_regression_factor,
+    umpire_tendency_factor,
+    wrc_handedness_factor,
 )
 
 
@@ -149,6 +157,12 @@ def calibrate_game(
     away_sp: Optional[ProbablePitcher] = None,
     home_bp: Optional[BullpenStatus] = None,
     away_bp: Optional[BullpenStatus] = None,
+    park_factors: Optional[Dict[str, float]] = None,
+    wrc_plus_splits: Optional[Dict[str, Dict[str, float]]] = None,
+    team_run_profiles: Optional[Dict[str, Dict[str, float]]] = None,
+    team_oaa: Optional[Dict[str, float]] = None,
+    umpire_name: Optional[str] = None,
+    umpire_tendencies: Optional[Dict[str, float]] = None,
 ) -> CalibratedGame:
     """
     Apply all available factors and return a CalibratedGame.
@@ -166,9 +180,57 @@ def calibrate_game(
         home_bp, away_bp
     )
 
+    # Phase 4 factors
+    park_home_factor, park_away_factor, park_home_adj, park_away_adj = park_factor(
+        canonical.home_team,
+        canonical.away_team,
+        park_factors,
+    )
+    wrc_home_factor, wrc_away_factor, wrc_home_adj, wrc_away_adj = wrc_handedness_factor(
+        canonical.home_team,
+        canonical.away_team,
+        home_sp,
+        away_sp,
+        wrc_plus_splits,
+    )
+    pyth_home_factor, pyth_away_factor, pyth_home_adj, pyth_away_adj = (
+        pythagorean_regression_factor(
+            canonical.home_team,
+            canonical.away_team,
+            team_run_profiles,
+        )
+    )
+    oaa_home_factor, oaa_away_factor, oaa_home_adj, oaa_away_adj = oaa_defense_factor(
+        canonical.home_team,
+        canonical.away_team,
+        team_oaa,
+    )
+    ump_home_factor, ump_away_factor, ump_home_adj, ump_away_adj = umpire_tendency_factor(
+        canonical.home_team,
+        canonical.away_team,
+        umpire_name,
+        umpire_tendencies,
+    )
+
     # Aggregate per team (additive)
-    home_total_raw = sp_home_adj + bp_home_adj
-    away_total_raw = sp_away_adj + bp_away_adj
+    home_total_raw = (
+        sp_home_adj
+        + bp_home_adj
+        + park_home_adj
+        + wrc_home_adj
+        + pyth_home_adj
+        + oaa_home_adj
+        + ump_home_adj
+    )
+    away_total_raw = (
+        sp_away_adj
+        + bp_away_adj
+        + park_away_adj
+        + wrc_away_adj
+        + pyth_away_adj
+        + oaa_away_adj
+        + ump_away_adj
+    )
 
     home_capped = abs(home_total_raw) > _TOTAL_CAP
     away_capped = abs(away_total_raw) > _TOTAL_CAP
@@ -191,12 +253,22 @@ def calibrate_game(
     home_adj = AdjustmentBreakdown(
         sp_quality=sp_home_adj,
         bullpen=bp_home_adj,
+        park_factor=park_home_adj,
+        wrc_handedness=wrc_home_adj,
+        pythagorean_regression=pyth_home_adj,
+        oaa_defense=oaa_home_adj,
+        umpire_tendency=ump_home_adj,
         total=home_total,
         capped=home_capped,
     )
     away_adj = AdjustmentBreakdown(
         sp_quality=sp_away_adj,
         bullpen=bp_away_adj,
+        park_factor=park_away_adj,
+        wrc_handedness=wrc_away_adj,
+        pythagorean_regression=pyth_away_adj,
+        oaa_defense=oaa_away_adj,
+        umpire_tendency=ump_away_adj,
         total=away_total,
         capped=away_capped,
     )
@@ -212,8 +284,24 @@ def calibrate_game(
         true_away_prob=true_away,
         home_adjustments=home_adj,
         away_adjustments=away_adj,
-        home_factors=[sp_home_factor, bp_home_factor],
-        away_factors=[sp_away_factor, bp_away_factor],
+        home_factors=[
+            sp_home_factor,
+            bp_home_factor,
+            park_home_factor,
+            wrc_home_factor,
+            pyth_home_factor,
+            oaa_home_factor,
+            ump_home_factor,
+        ],
+        away_factors=[
+            sp_away_factor,
+            bp_away_factor,
+            park_away_factor,
+            wrc_away_factor,
+            pyth_away_factor,
+            oaa_away_factor,
+            ump_away_factor,
+        ],
         favorite=favorite,
         num_bookmakers=canonical.num_bookmakers,   # Bug 1 fix
         bookmaker_std_pp=canonical.bookmaker_std_pp,

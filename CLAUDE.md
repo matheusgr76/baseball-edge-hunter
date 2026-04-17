@@ -20,15 +20,22 @@ mlb_edge_hunter/
 │   ├── bookmakers.py          # The Odds API → MLB bookmaker odds
 │   ├── polymarket.py          # Gamma API → prediction market odds
 │   └── mlb_data.py            # MLB stats API → injuries, bullpen, weather
+│   └── phase4_data.py         # Advanced factor datasets + standings/umpire context
 ├── normalization/
 │   ├── devig.py               # 2-way devig (moneyline only)
 │   └── teams.py               # Team name standardization across sources
 ├── calibration/
 │   └── factors.py             # Situational adjustments (bullpen, weather, umpire, park)
+│   └── phase4.py              # Phase 4 factor functions
 ├── comparison/
 │   └── edge.py                # Edge detection + signal generation
 ├── orchestration/
 │   └── pipeline.py            # Entry point: run_pipeline()
+├── data/
+│   ├── park_factors.json
+│   ├── wrc_plus_splits.json
+│   ├── team_oaa.json
+│   └── umpire_tendencies.json
 ├── output/
 │   └── ...                    # Signal reports, logs
 └── tests/
@@ -83,11 +90,11 @@ GET https://api.the-odds-api.com/v4/sports/baseball_mlb/odds?regions=us&markets=
 - Entry point: `run_pipeline()` in `orchestration/pipeline.py`
 - **Polymarket is the gatekeeper.** Only process games that exist on Polymarket.
 - EdgeAnalysis is **PER-OUTCOME** (Team A ML, Team B ML) — moneyline only
-- Alpha threshold: **2.5pp minimum** for actionable signals
+- Alpha threshold: **3.5pp minimum** for actionable signals (reliability pass 2026-04-17)
 - **Signal tiers (5 levels):**
-  - 🔥 **Strong Bet** — edge ≥ 3.0pp + confidence ≥ 80%
-  - ✅ **Bet** — edge ≥ 2.5pp + confidence ≥ 70%
-  - ⏭️ **Skip** — edge < 2.5pp (not enough edge)
+  - 🔥 **Strong Bet** — edge ≥ 4.0pp + confidence ≥ 85%
+  - ✅ **Bet** — edge ≥ 3.5pp + confidence ≥ 75%
+  - ⏭️ **Skip** — edge < 3.5pp (not enough edge)
   - 👎 **Fade** — edge −1pp to −3pp (market overpriced on Polymarket)
   - 🚫 **AVOID** — edge < −3pp (strong negative edge, stay away)
 - Situational modifiers are FILTERS on existing signals — they do NOT generate signals alone
@@ -113,6 +120,20 @@ GET https://api.the-odds-api.com/v4/sports/baseball_mlb/odds?regions=us&markets=
 |--------|--------|-------------|-------|
 | Pythagorean W% delta | Baseball Reference | flag only | Teams due for regression |
 | OAA (defense) | Baseball Savant | ±1pp | Ground-ball pitcher + bad infield = risk |
+
+## Phase 4 Status (2026-04-17)
+
+Phase 4 is implemented with conservative weighting and data-driven inputs:
+- Park factors (`data/park_factors.json`)
+- wRC+ vs SP handedness (`data/wrc_plus_splits.json`)
+- Pythagorean regression (live MLB standings run-profile feed)
+- OAA defense (`data/team_oaa.json`)
+- Umpire tendency (`data/umpire_tendencies.json` + home plate assignment)
+
+Reliability safeguards kept active:
+- Stricter actionable thresholds and confidence gates
+- Rematch side-flip guard (short-series instability)
+- Polymarket outcome matching fail-closed on ambiguity
 
 ## Known bugs from previous Edge Hunters (avoid repeating)
 - Don't call non-existent functions (NBA: `fetch_polymarket_odds` didn't exist)

@@ -11,6 +11,15 @@ Same 5-layer architecture as NBA/Soccer Edge Hunter. MLB-specific adaptations be
 
 ---
 
+## Current Status (2026-04-17)
+
+- Reliability hardening completed before Phase 4 (stricter thresholds, confidence tightening, rematch flip guard, fail-closed Polymarket outcome mapping).
+- Phase 4 advanced-factor framework is now implemented in pipeline runtime.
+- Current calibration cap in production code is **±6pp per team** (reduced from ±8pp during reliability pass).
+- Validation next step: run live sample and evaluate CLV/false positives before tuning Phase 4 weights.
+
+---
+
 ## Phase 1: Core Pipeline ✅ COMPLETE (2026-03-21)
 
 All files built and smoke-tested. GitHub: https://github.com/matheusgr76/baseball-edge-hunter
@@ -35,18 +44,25 @@ baseball_edge_hunter/
 │   ├── bookmakers.py        ✅ Phase 1
 │   ├── polymarket.py        ✅ Phase 1
 │   └── mlb_data.py          ✅ Phase 2 — SP (FIP) + bullpen usage
+│   └── phase4_data.py       ✅ Phase 4 — advanced factor datasets + run profile/umpire fetch
 ├── normalization/
 │   ├── devig.py             ✅ Phase 1
 │   └── teams.py             ✅ Phase 1
 ├── calibration/
-│   └── factors.py           ✅ Phase 2 — SP ±5pp, bullpen ±4pp, ±8pp cap
+│   ├── factors.py           ✅ Phase 2+4 — integrated factor stack, ±6pp cap
+│   └── phase4.py            ✅ Phase 4 — park/wRC/pythag/OAA/umpire factor functions
 ├── comparison/
 │   └── edge.py              ✅ Phase 1+2 — accepts CanonicalGame or CalibratedGame
 ├── orchestration/
-│   └── pipeline.py          ✅ Phase 1+2 — calibration step wired
+│   └── pipeline.py          ✅ Phase 1+2+4 — advanced data ingestion wired
 ├── output/
 │   ├── report_formatter.py  ✅ Phase 1+2 — real factor rows
 │   └── clv_tracker.py       ✅ Phase 3a — signal log, CLV resolution, beat-rate summary
+├── data/
+│   ├── park_factors.json    ✅ Phase 4 seed data
+│   ├── wrc_plus_splits.json ✅ Phase 4 seed data
+│   ├── team_oaa.json        ✅ Phase 4 seed data
+│   └── umpire_tendencies.json ✅ Phase 4 seed data
 ```
 
 **Pending first live-run verifications (regular season ~April 1):**
@@ -60,7 +76,7 @@ baseball_edge_hunter/
 ## Phase 2: Situational Calibration ✅ COMPLETE (2026-03-21)
 
 **Goal:** Add Tier 1 factors that adjust consensus before edge comparison.
-Calibration is additive to consensus, bounded at ±8pp total per team.
+Calibration is additive to consensus, bounded at ±6pp total per team.
 
 ### New files:
 - `ingestion/mlb_data.py` — probable pitchers + bullpen usage
@@ -242,11 +258,19 @@ Backtesting module deleted in full. B1–B5 are moot. B4 (Sox collision) is a li
 
 ---
 
-## Phase 4: Advanced Factors (Tier 2-3)
+## Phase 4: Advanced Factors ✅ COMPLETE (2026-04-17)
 
-Each factor added individually, backtested before inclusion:
-- Umpire tendencies (UmpScorecards.com)
-- wRC+ vs SP handedness (FanGraphs)
-- Pythagorean W% regression flag
-- OAA defensive adjustment
-- Park factors (`data/park_factors.json`)
+Implemented factors:
+- Park factor (`data/park_factors.json`) → conservative home-context adjustment
+- wRC+ vs SP handedness (`data/wrc_plus_splits.json`) → handedness matchup delta
+- Pythagorean W% regression (MLB standings API run profile) → over/under-performance correction
+- OAA defense (`data/team_oaa.json`) → small run-prevention edge adjustment
+- Umpire tendency (`data/umpire_tendencies.json` + schedule officials) → optional home-bias adjustment
+
+Implementation notes:
+- New ingestion module: `ingestion/phase4_data.py`
+- New factor module: `calibration/phase4.py`
+- `calibration/factors.py` now aggregates Tier 1 + Phase 4 factors under ±6pp total cap
+- Added Phase 4 tests:
+  - `tests/test_phase4_factors.py`
+  - `tests/test_phase4_data.py`

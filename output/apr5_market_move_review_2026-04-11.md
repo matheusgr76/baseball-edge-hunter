@@ -52,3 +52,9 @@ The outcome slate was extremely underdog-heavy, but pregame market movement was 
 - The local snapshot time labels were not reliable enough for closing-price sampling. Official MLB `gameDate` was used instead.
 - `PHI@COL` was the most important near-miss: edge was +2.5pp but confidence was only 63%, so the confidence gate blocked a bad bet.
 - This sample supports keeping the current edge and confidence gates. It does not support loosening thresholds.
+
+## Addendum (2026-04-17)
+
+- Phase 4 advanced factors are now live in pipeline calibration.
+- This Apr 5 review should be treated as a reliability baseline from the pre-Phase-4 configuration.
+- Recalibration decisions should use fresh post-Phase-4 outcomes (target: at least 20 resolved actionable signals) before changing thresholds or factor weights.

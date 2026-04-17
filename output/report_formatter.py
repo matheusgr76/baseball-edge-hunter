@@ -9,6 +9,7 @@ import os
 from datetime import datetime
 from typing import Dict, List
 
+import config
 from models import EdgeAnalysis, FactorResult
 
 
@@ -23,8 +24,11 @@ _SIGNAL_EMOJI = {
 }
 
 _SIGNAL_LEGEND = (
-    "Signal legend: 🔥 Strong Bet (≥3.0pp+conf≥80%) | ✅ Bet (≥2.5pp+conf≥70%) | "
-    "⏭️ Skip (<2.5pp) | 👎 Fade (-1 to -3pp) | 🚫 AVOID (<-3pp)"
+    f"Signal legend: 🔥 Strong Bet (≥{config.STRONG_BET_EDGE_PP:.1f}pp+conf≥"
+    f"{config.STRONG_BET_CONF_PCT}%) | ✅ Bet (≥{config.BET_EDGE_PP:.1f}pp+conf≥"
+    f"{config.BET_CONF_PCT}%) | ⏭️ Skip (<{config.BET_EDGE_PP:.1f}pp) | "
+    f"👎 Fade ({config.FADE_MIN_PP:.0f} to {config.AVOID_THRESHOLD_PP:.0f}pp) | "
+    f"🚫 AVOID (<{config.AVOID_THRESHOLD_PP:.0f}pp)"
 )
 
 _VERDICT_ICON = {

@@ -2,6 +2,16 @@
 
 ## DONE
 
+### Phase 4 — Advanced Factors ✅ (2026-04-17)
+- [x] Add park-factor adjustment (data-driven via `data/park_factors.json`)
+- [x] Add wRC+ vs SP-handedness adjustment (data-driven via `data/wrc_plus_splits.json`)
+- [x] Add pythagorean regression adjustment (live MLB standings run-profile feed)
+- [x] Add OAA defensive adjustment (data-driven via `data/team_oaa.json`)
+- [x] Add umpire tendency adjustment (home-plate assignment + `data/umpire_tendencies.json`)
+- [x] Wire Phase 4 data ingestion in pipeline (`ingestion/phase4_data.py`)
+- [x] Add smoke/unit tests for Phase 4 factor math + ingestion parsing
+- [x] Verify test suite passes (`python -m unittest discover -s tests -p "test_*.py"`)
+
 ### Reliability Hardening — Pre-Phase 4 ✅ (2026-04-17)
 - [x] Tighten actionable thresholds in `config.py`
   - `BET`: edge 2.5pp → 3.5pp, confidence 70% → 75%
@@ -138,11 +148,13 @@
 ---
 
 ## Phase 4: Advanced Factors (Tier 2-3)
-- [ ] Umpire tendencies (scrape UmpScorecards.com)
-- [ ] wRC+ vs SP handedness (FanGraphs splits — needs auth workaround)
-- [ ] Pythagorean W% regression flag
-- [ ] OAA defensive adjustment
-- [ ] Each factor: add → backtest → keep if CLV% improves, remove if noise
+- [x] Umpire tendencies (data file + home-plate assignment integration)
+- [x] wRC+ vs SP handedness (data-file integration, no-auth ingestion path)
+- [x] Pythagorean W% regression factor
+- [x] OAA defensive adjustment
+- [x] Park factors (`data/park_factors.json`) integrated
+- [ ] Calibrate factor weights using fresh CLV sample after at least 20 resolved actionable signals
+- [ ] Replace seed wRC+/OAA/umpire datasets with production values and re-verify
 
 ---
 

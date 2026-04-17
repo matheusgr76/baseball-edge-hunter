@@ -12,6 +12,14 @@ from typing import List
 from ingestion.bookmakers import fetch_bookmaker_odds, get_unique_games
 from ingestion.polymarket import get_polymarket_odds
 from ingestion.mlb_data import fetch_probable_pitchers, fetch_bullpen_status, fetch_lineup_status
+from ingestion.phase4_data import (
+    fetch_home_plate_umpires,
+    fetch_team_run_profiles,
+    load_park_factors,
+    load_team_oaa,
+    load_umpire_tendencies,
+    load_wrc_plus_splits,
+)
 from normalization.devig import calculate_consensus
 from normalization.teams import normalize_team_name
 from calibration.factors import calibrate_game
@@ -78,6 +86,18 @@ def run_pipeline() -> PipelineResult:
     lineup_status = fetch_lineup_status(date_str)
     confirmed_count = sum(1 for v in lineup_status.values() if v)
     print(f"  ✓ Lineup status: {confirmed_count}/{len(lineup_status)} games confirmed")
+    park_factors = load_park_factors()
+    wrc_plus_splits = load_wrc_plus_splits()
+    team_run_profiles = fetch_team_run_profiles(date_str)
+    team_oaa = load_team_oaa()
+    umpire_tendencies = load_umpire_tendencies()
+    home_plate_umpires = fetch_home_plate_umpires(date_str)
+    print(f"  ✓ Park factor rows: {len(park_factors)}")
+    print(f"  ✓ wRC+ split rows: {len(wrc_plus_splits)}")
+    print(f"  ✓ Team run profiles: {len(team_run_profiles)}")
+    print(f"  ✓ Team OAA rows: {len(team_oaa)}")
+    print(f"  ✓ Umpire tendency rows: {len(umpire_tendencies)}")
+    print(f"  ✓ Home-plate umpire assignments: {len(home_plate_umpires)}")
 
     # ── Step 3-6: Per-game processing ────────────────────────────────────────
     print()
@@ -107,6 +127,7 @@ def run_pipeline() -> PipelineResult:
             away_sp = probable_pitchers.get(away_canonical)
             home_bp = fetch_bullpen_status(home_canonical, date_str)
             away_bp = fetch_bullpen_status(away_canonical, date_str)
+            umpire_name = home_plate_umpires.get((home_canonical, away_canonical))
 
             calibrated = calibrate_game(
                 canonical,
@@ -114,6 +135,12 @@ def run_pipeline() -> PipelineResult:
                 away_sp=away_sp,
                 home_bp=home_bp,
                 away_bp=away_bp,
+                park_factors=park_factors,
+                wrc_plus_splits=wrc_plus_splits,
+                team_run_profiles=team_run_profiles,
+                team_oaa=team_oaa,
+                umpire_name=umpire_name,
+                umpire_tendencies=umpire_tendencies,
             )
 
             # Step 4b: Lineup confirmation warning

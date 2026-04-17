@@ -185,7 +185,7 @@ def _confidence(
         2. Bookmaker count bonus: +4/+10/+16
         3. Edge magnitude bonus: +2/+4/+6/+9/+12
         4. Factor agreement: +4 if aligned, -6 if conflicting
-        5. Data completeness: -4 per missing factor
+        5. Data completeness: -4 per missing core Tier-1 factor
         6. Sparse-factor guard: -4 when only one non-zero factor contributes
         7. Bookmaker variance: -6/-10 for disagreement
         8. Volatility penalty: -4 for large-edge + moderate variance combos
@@ -215,13 +215,18 @@ def _confidence(
     elif abs_edge >= 1.0:
         base += 2
 
-    # Factor agreement + data completeness (requires factors list)
-    if factors:
-        nonzero_factors = [f for f in factors if f.result != 0.0]
-        missing_count = len(factors) - len(nonzero_factors)
+    required_factor_names = {"SP QUALITY (FIP)", "BULLPEN AVAILABILITY"}
 
-        # Data completeness penalty: -4 per missing factor
-        base -= missing_count * 4
+    # Factor agreement + data completeness
+    if factors:
+        nonzero_factors = [f for f in factors if abs(f.result) > 0.001]
+        missing_required = [
+            f for f in factors
+            if f.name in required_factor_names and abs(f.result) <= 0.001
+        ]
+
+        # Data completeness penalty only for core Tier-1 factors
+        base -= len(missing_required) * 4
 
         # Factor agreement: do all nonzero factors point the same direction?
         if len(nonzero_factors) >= 2:

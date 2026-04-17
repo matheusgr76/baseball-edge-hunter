@@ -119,6 +119,11 @@ class AdjustmentBreakdown:
     """Per-factor calibration adjustments for one team"""
     sp_quality: float = 0.0
     bullpen: float = 0.0
+    park_factor: float = 0.0
+    wrc_handedness: float = 0.0
+    pythagorean_regression: float = 0.0
+    oaa_defense: float = 0.0
+    umpire_tendency: float = 0.0
     total: float = 0.0
     capped: bool = False     # True if total hit ±8pp hard cap
 

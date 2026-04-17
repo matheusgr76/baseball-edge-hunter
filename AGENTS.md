@@ -462,3 +462,9 @@ Every implementation MUST:
 - Don't run destructive commands without asking.
 - `trash` > `rm` (recoverable beats gone forever)
 - When in doubt, ask.
+
+## Project Status Note (2026-04-17)
+
+- Phase 4 advanced factors were implemented in production flow (`park`, `wRC+ handedness`, `pythagorean regression`, `OAA`, `umpire tendency`).
+- Reliability-first controls remain active (stricter actionable thresholds, confidence hardening, rematch flip guard, fail-closed market matching).
+- Next calibration checkpoint: retune factor weights only after at least 20 resolved actionable signals with fresh CLV/false-positive review.

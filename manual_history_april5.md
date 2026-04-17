@@ -50,3 +50,11 @@ Important constraint:
 - This is a research dataset, not a betting/execution feature.
 - The first market-board seed will be transcribed from the attached PDF into structured JSON; no OCR dependency will be introduced for v1.
 - The existing daily report and predictions log remain the source of truth for normal pipeline runs; the new snapshot file is only for manual historical capture from external artifacts.
+
+## Post-Phase-4 Follow-Up (2026-04-17)
+
+- This manual snapshot remains a valid pre-Phase-4 baseline for reliability comparisons.
+- Phase 4 factors are now integrated in live pipeline runtime, so future weekly reviews should tag runs as:
+  - `pre_phase4` for historical baselines like Apr 5
+  - `phase4_live` for new calibrated runs
+- Keep this file unchanged as a frozen planning artifact for the Apr 5 snapshot workflow.
