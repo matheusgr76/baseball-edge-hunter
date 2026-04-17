@@ -134,10 +134,13 @@ def get_polymarket_odds(
     home_idx, away_idx = _match_outcome_indices(outcomes, home_canonical, away_canonical)
 
     if home_idx is None or away_idx is None:
-        # Fallback: assume index 0=home, 1=away (common Polymarket convention)
-        # Always log — silent fallback masks incorrect home/away assignment
-        home_idx, away_idx = 0, 1
-        print(f"  ⚠️  Outcome matching failed for {slug}: using (0,1) fallback | outcomes={outcomes}")
+        # Reliability-first behavior: do not assume ordering when matching fails.
+        # Ambiguous mapping can invert sides and create false positives.
+        print(
+            f"  ⚠️  Outcome matching failed for {slug}: skipping ambiguous market "
+            f"| outcomes={outcomes}"
+        )
+        return None
 
     home_price = prices[home_idx] * 100  # Convert 0-1 → 0-100
     away_price = prices[away_idx] * 100

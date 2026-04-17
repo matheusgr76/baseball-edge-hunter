@@ -5,10 +5,15 @@ EdgeAnalysis is per-outcome (two per game: home + away).
 Accepts CanonicalGame (Phase 1) or CalibratedGame (Phase 2+).
 """
 
-from typing import List, Union
-from datetime import datetime
+import json
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple, Union
+from datetime import datetime, timedelta, timezone
+
 from models import CanonicalGame, CalibratedGame, PolymarketOpportunity, EdgeAnalysis
 import config
+
+_SIGNAL_HISTORY_CACHE: Optional[Dict[Tuple[str, str], List[dict]]] = None
 
 
 def calculate_edge(
@@ -90,6 +95,16 @@ def _single_edge(
     edge_pp = round(true_prob - poly.polymarket_prob, 2)
     confidence_pct = _confidence(edge_pp, num_bookmakers, factors, bm_std_pp)
     signal = _assign_signal(edge_pp, confidence_pct, poly.polymarket_prob)
+
+    if signal in ("STRONG BET", "BET") and _is_rematch_flip_risk(
+        team_name=team_name,
+        opponent=opponent,
+        commence_time=commence_time,
+        edge_pp=edge_pp,
+    ):
+        confidence_pct = max(35, confidence_pct - config.REMATCH_FLIP_CONF_PENALTY)
+        signal = "SKIP"
+
     actionable = signal in ("STRONG BET", "BET")
 
     return EdgeAnalysis(
@@ -118,15 +133,15 @@ def _assign_signal(edge_pp: float, confidence_pct: int, polymarket_prob: float =
     Assign 5-tier signal based on edge and confidence.
 
     Tiers (from CLAUDE.md):
-        STRONG BET  — edge >= 3.0pp AND confidence >= 80%
-        BET         — edge >= 2.5pp AND confidence >= 70%
-        SKIP        — edge in [-1.0, 2.5)   (insufficient or no edge)
+        STRONG BET  — edge >= STRONG_BET_EDGE_PP AND confidence >= STRONG_BET_CONF_PCT
+        BET         — edge >= BET_EDGE_PP AND confidence >= BET_CONF_PCT
+        SKIP        — edge in [FADE_MIN_PP, BET_EDGE_PP)   (insufficient or no edge)
         FADE        — edge in [-3.0, -1.0)  (market overpriced on Polymarket)
         AVOID       — edge < -3.0           (strong negative edge)
 
-    Edge-floor guards (proactive, from basketball 19W/5L analysis):
-        Moderate favorite band (55-65%): requires >= 3.5pp edge
-        High confidence zone (>65%): requires >= 5.0pp edge
+    Edge-floor guards (reliability pass, 2026-04-17):
+        Moderate favorite band: requires moderate edge cushion
+        Higher implied favorite probability: requires larger edge cushion
     """
     if edge_pp >= config.STRONG_BET_EDGE_PP and confidence_pct >= config.STRONG_BET_CONF_PCT:
         signal = "STRONG BET"
@@ -166,58 +181,198 @@ def _confidence(
     factor agreement, data completeness, and bookmaker variance.
 
     Components:
-        1. Base: 50
-        2. Bookmaker count bonus: +6/+12/+20 (more books = sharper consensus)
-        3. Edge magnitude bonus: +3/+6/+10/+15
-        4. Factor agreement: +5 if SP & bullpen agree, -5 if they conflict
-        5. Data completeness: -5 per missing factor (SP or bullpen)
-        6. Bookmaker variance: -5 if std dev > 3pp (books disagree on price)
+        1. Base: 48
+        2. Bookmaker count bonus: +4/+10/+16
+        3. Edge magnitude bonus: +2/+4/+6/+9/+12
+        4. Factor agreement: +4 if aligned, -6 if conflicting
+        5. Data completeness: -4 per missing factor
+        6. Sparse-factor guard: -4 when only one non-zero factor contributes
+        7. Bookmaker variance: -6/-10 for disagreement
+        8. Volatility penalty: -4 for large-edge + moderate variance combos
 
-    Capped at 95% — no model is perfect.
+    Reliability-first cap: 93%.
     """
-    base = 50
+    base = 48
 
     # Bookmaker count bonus
     if num_bookmakers >= 5:
-        base += 20
+        base += 16
     elif num_bookmakers >= 3:
-        base += 12
+        base += 10
     elif num_bookmakers >= 2:
-        base += 6
+        base += 4
 
     # Edge magnitude bonus
     abs_edge = abs(edge_pp)
-    if abs_edge >= 5.0:
-        base += 15
+    if abs_edge >= 8.0:
+        base += 12
+    elif abs_edge >= 5.0:
+        base += 9
     elif abs_edge >= 3.0:
-        base += 10
-    elif abs_edge >= 2.0:
         base += 6
+    elif abs_edge >= 2.0:
+        base += 4
     elif abs_edge >= 1.0:
-        base += 3
+        base += 2
 
     # Factor agreement + data completeness (requires factors list)
     if factors:
         nonzero_factors = [f for f in factors if f.result != 0.0]
         missing_count = len(factors) - len(nonzero_factors)
 
-        # Data completeness penalty: -5 per missing factor
-        base -= missing_count * 5
+        # Data completeness penalty: -4 per missing factor
+        base -= missing_count * 4
 
         # Factor agreement: do all nonzero factors point the same direction?
         if len(nonzero_factors) >= 2:
             positive = sum(1 for f in nonzero_factors if f.result > 0)
             negative = len(nonzero_factors) - positive
             if positive == len(nonzero_factors) or negative == len(nonzero_factors):
-                base += 5   # All factors agree → boost
+                base += 4
             else:
-                base -= 5   # Factors conflict → penalty
+                base -= 6
+        elif len(nonzero_factors) == 1:
+            base -= 4
 
     # Bookmaker variance penalty: books disagree on the true price
-    if bm_std_pp > 3.0:
-        base -= 5
+    if bm_std_pp > 4.5:
+        base -= 10
+    elif bm_std_pp > 3.0:
+        base -= 6
 
-    return max(40, min(base, 95))
+    if abs_edge >= 6.0 and bm_std_pp > 2.5:
+        base -= 4
+
+    return max(35, min(base, 93))
+
+
+def _is_rematch_flip_risk(
+    team_name: str,
+    opponent: str,
+    commence_time: datetime,
+    edge_pp: float,
+) -> bool:
+    if not config.REMATCH_FLIP_GUARD_ENABLED:
+        return False
+
+    if abs(edge_pp) >= config.REMATCH_FLIP_OVERRIDE_EDGE:
+        return False
+
+    pair_key = _pair_key(team_name, opponent)
+    history = _load_signal_history().get(pair_key, [])
+    if not history:
+        return False
+
+    current_dt = _to_utc(commence_time)
+    if current_dt is None:
+        return False
+
+    lookback_floor = current_dt - timedelta(hours=config.REMATCH_FLIP_LOOKBACK_HOURS)
+    prior_candidates = [
+        row
+        for row in history
+        if row["commence_time"] < current_dt and row["commence_time"] >= lookback_floor
+    ]
+    if not prior_candidates:
+        return False
+
+    previous = prior_candidates[-1]
+    if previous["team_name"].lower() == team_name.lower():
+        return False
+
+    if abs(previous["edge_pp"]) < config.REMATCH_FLIP_MIN_PRIOR_EDGE:
+        return False
+
+    print(
+        "  ⚠️  Reliability guard: rematch side flip detected "
+        f"({team_name} vs {opponent}); previous actionable edge "
+        f"was on {previous['team_name']} ({previous['edge_pp']:+.2f}pp). "
+        "Downgrading to SKIP."
+    )
+    return True
+
+
+def _load_signal_history() -> Dict[Tuple[str, str], List[dict]]:
+    global _SIGNAL_HISTORY_CACHE
+    if _SIGNAL_HISTORY_CACHE is not None:
+        return _SIGNAL_HISTORY_CACHE
+
+    history_path = (
+        Path(__file__).resolve().parent.parent
+        / config.OUTPUT_DIRECTORY
+        / "predictions_log.json"
+    )
+    by_pair: Dict[Tuple[str, str], List[dict]] = {}
+
+    try:
+        raw = history_path.read_text(encoding="utf-8")
+        entries = json.loads(raw) if raw.strip() else []
+    except Exception:
+        _SIGNAL_HISTORY_CACHE = {}
+        return _SIGNAL_HISTORY_CACHE
+
+    if not isinstance(entries, list):
+        _SIGNAL_HISTORY_CACHE = {}
+        return _SIGNAL_HISTORY_CACHE
+
+    for row in entries:
+        if not isinstance(row, dict):
+            continue
+        if not row.get("actionable", False):
+            continue
+        if row.get("signal") not in ("BET", "STRONG BET"):
+            continue
+
+        team_name = str(row.get("team_name", "")).strip()
+        opponent = str(row.get("opponent", "")).strip()
+        if not team_name or not opponent:
+            continue
+
+        commence_raw = row.get("commence_time") or row.get("logged_at")
+        commence_dt = _to_utc(commence_raw)
+        if commence_dt is None:
+            continue
+
+        edge_pp = float(row.get("edge_pp", 0.0) or 0.0)
+        key = _pair_key(team_name, opponent)
+        by_pair.setdefault(key, []).append(
+            {
+                "team_name": team_name,
+                "opponent": opponent,
+                "edge_pp": edge_pp,
+                "commence_time": commence_dt,
+            }
+        )
+
+    for key in by_pair:
+        by_pair[key].sort(key=lambda item: item["commence_time"])
+
+    _SIGNAL_HISTORY_CACHE = by_pair
+    return _SIGNAL_HISTORY_CACHE
+
+
+def _pair_key(team_a: str, team_b: str) -> Tuple[str, str]:
+    return tuple(sorted((team_a.strip().lower(), team_b.strip().lower())))
+
+
+def _to_utc(value: Union[datetime, str, None]) -> Optional[datetime]:
+    if value is None:
+        return None
+
+    if isinstance(value, datetime):
+        dt = value
+    else:
+        text = str(value).strip()
+        if not text:
+            return None
+        try:
+            dt = datetime.fromisoformat(text.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
 
 
 def filter_actionable(edges: List[EdgeAnalysis]) -> List[EdgeAnalysis]:

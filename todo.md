@@ -2,6 +2,35 @@
 
 ## DONE
 
+### Reliability Hardening — Pre-Phase 4 ✅ (2026-04-17)
+- [x] Tighten actionable thresholds in `config.py`
+  - `BET`: edge 2.5pp → 3.5pp, confidence 70% → 75%
+  - `STRONG BET`: edge 3.0pp → 4.0pp, confidence 80% → 85%
+- [x] Raise edge-floor guards in `config.py` for moderate/high implied favorites
+- [x] Add rematch flip reliability guard in `comparison/edge.py`
+  - Downgrades actionable signals to `SKIP` when the same matchup flips sides within 72h after a strong prior actionable edge, unless override edge is very large
+- [x] Recalibrate confidence scoring in `comparison/edge.py`
+  - Lower baseline, lower bonuses, stronger penalties for sparse factors and bookmaker disagreement
+- [x] Reduce calibration aggressiveness in `calibration/factors.py`
+  - SP scale 1.2 → 0.9
+  - SP cap ±5pp → ±4pp
+  - Bullpen penalties: -2/-4pp → -1.5/-3pp
+  - Total calibration cap ±8pp → ±6pp
+- [x] Harden Polymarket outcome mapping in `ingestion/polymarket.py`
+  - Removed `(0,1)` fallback when outcome matching is ambiguous
+  - Ambiguous markets are now skipped (fail-closed)
+
+### Reliability Audit — Week 3 Outcome Check ✅ (2026-04-17)
+- [x] Matched `output/daily_report_2026-04-10.txt` and `output/daily_report_2026-04-11.txt` games to official MLB final scores (Stats API)
+- [x] Saved audit dataset: `output/week3_outcome_check_2026-04-17.json`
+- [x] Actionable signals resolved: 8 total, 3 wins, 5 false positives (37.5% hit rate)
+- [x] Observation: 72% confidence BET bucket underperformed (2-5), including high-edge misses (`ARI@PHI`, `SF@BAL`)
+- [x] Recommendation before Phase 4: recalibrate confidence/edge gating and validate reliability checks first
+
+### Utility — WhatsApp Link Import ✅ (2026-04-11)
+- [x] Build `whatsapp_links_to_obsidian.py` — standard-library script that converts exported WhatsApp URLs into Obsidian Markdown notes
+- [x] Verify script syntax without reading the private chat export or writing to Google Drive
+
 ### Phase 1: Core Pipeline ✅ (2026-03-21)
 - [x] Build `models.py` — all dataclasses (RawBookmakerOdds, CanonicalGame, PolymarketOpportunity, EdgeAnalysis, PipelineResult)
 - [x] Build `config.py` — API keys from env, signal thresholds, liquidity floor
@@ -38,6 +67,10 @@
 - [x] Calculate CLV per signal: `closing_line - signal_line`
 - [x] Aggregate: `clv_summary()` → CLV% = % of signals that beat closing line
 - [x] **Target:** ≥55% CLV beat-rate over 100+ signals
+- [x] Apr 5 manual market-move review completed (2026-04-11)
+  - File: `output/apr5_market_move_review_2026-04-11.md`
+  - Result: zero actionable bets; pregame market moves mostly flat; edge direction not predictive on this 14-game sample
+  - Note: `CHC@CLE` doubleheader slug/time ambiguity requires caution in future manual snapshots
 
 ### 3b — Historical Backtest ~~(removed 2026-04-04)~~
 - Deleted: backtesting folder and all associated CLI flags from main.py

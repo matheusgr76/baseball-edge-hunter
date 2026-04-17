@@ -2,10 +2,11 @@
 Calibration Layer - Factors
 Apply situational adjustments to devigged consensus probabilities.
 Phase 2 Tier 1: SP quality + bullpen availability.
-Total adjustment capped at ±8pp per team.
+Reliability pass (2026-04-17): reduced factor aggressiveness to limit false positives.
+Total adjustment capped at ±6pp per team.
 """
 
-from typing import Dict, Optional, Tuple
+from typing import Optional, Tuple
 from models import (
     CanonicalGame, CalibratedGame, AdjustmentBreakdown,
     FactorResult, ProbablePitcher, BullpenStatus,
@@ -13,10 +14,11 @@ from models import (
 
 
 _LEAGUE_AVG_FIP = 4.20   # Baseline for SP quality comparison
-_SP_SCALE = 1.2          # Each FIP point delta → X pp adjustment
-_SP_MAX_ADJ = 5.0        # Hard cap per SP factor
-_BULLPEN_MAX_ADJ = 4.0   # Hard cap per bullpen factor
-_TOTAL_CAP = 8.0         # Total calibration cap per team
+_SP_SCALE = 0.9          # Each FIP point delta → X pp adjustment
+_SP_MAX_ADJ = 4.0        # Hard cap per SP factor
+_BULLPEN_MAX_ADJ = 3.0   # Hard cap per bullpen factor
+_BULLPEN_MODERATE_ADJ = 1.5
+_TOTAL_CAP = 6.0         # Total calibration cap per team
 
 
 # ============================================================================
@@ -35,8 +37,8 @@ def sp_quality_factor(
         raw_adj   = delta_fip * _SP_SCALE
         adj       = clamp(raw_adj, -_SP_MAX_ADJ, +_SP_MAX_ADJ)
 
-    A team with a sub-3.0 FIP ace gets up to +5pp.
-    A team with a 5.5+ FIP replacement gets up to -5pp.
+    A team with a sub-3.0 FIP ace gets up to +4pp.
+    A team with a 5.5+ FIP replacement gets up to -4pp.
 
     Returns:
         (home_factor, away_factor, home_adj_pp, away_adj_pp)
@@ -92,8 +94,8 @@ def bullpen_factor(
 
     Thresholds (combined top-2 RPs):
         < 25 pitches   →  0.0pp  (fresh)
-        25-39 pitches  → -2.0pp  (moderate fatigue)
-        ≥ 40 pitches   → -4.0pp  (heavy use)
+        25-39 pitches  → -1.5pp  (moderate fatigue)
+        ≥ 40 pitches   → -3.0pp  (heavy use)
 
     Returns:
         (home_factor, away_factor, home_adj_pp, away_adj_pp)
@@ -131,9 +133,9 @@ def _bullpen_penalty(bp: Optional[BullpenStatus]) -> float:
     if not bp:
         return 0.0
     if bp.pitches_last_48h >= 40:
-        return -4.0
+        return -_BULLPEN_MAX_ADJ
     if bp.pitches_last_48h >= 25:
-        return -2.0
+        return -_BULLPEN_MODERATE_ADJ
     return 0.0
 
 
@@ -152,7 +154,7 @@ def calibrate_game(
     Apply all available factors and return a CalibratedGame.
 
     If a data source is missing (None), that factor is skipped (0pp adjustment).
-    Total adjustment per team is bounded to ±_TOTAL_CAP (8pp).
+    Total adjustment per team is bounded to ±_TOTAL_CAP (6pp).
     """
     # SP factor
     sp_home_factor, sp_away_factor, sp_home_adj, sp_away_adj = sp_quality_factor(
