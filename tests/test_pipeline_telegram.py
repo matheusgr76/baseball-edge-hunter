@@ -19,6 +19,7 @@ class PipelineTelegramTests(unittest.TestCase):
     @patch("orchestration.pipeline.print_pnl_chart")
     @patch("orchestration.pipeline.print_weekly_summary")
     @patch("orchestration.pipeline.print_clv_summary")
+    @patch("orchestration.pipeline.resolve_game_outcomes")
     @patch("orchestration.pipeline.export_csv")
     @patch("orchestration.pipeline.log_signals")
     @patch("orchestration.pipeline.save_daily_report")
@@ -55,6 +56,7 @@ class PipelineTelegramTests(unittest.TestCase):
         mock_save_daily_report,
         mock_log_signals,
         mock_export_csv,
+        mock_resolve_game_outcomes,
         mock_print_clv_summary,
         mock_print_weekly_summary,
         mock_print_pnl_chart,
@@ -169,6 +171,13 @@ class PipelineTelegramTests(unittest.TestCase):
         mock_calculate_edge.return_value = [home_edge, away_edge]
         mock_rank_by_edge.return_value = [home_edge, away_edge]
         mock_log_signals.return_value = 1
+        mock_resolve_game_outcomes.return_value = {
+            "entries_scanned": 2,
+            "eligible_unresolved": 0,
+            "updated": 0,
+            "actionable_updated": 0,
+            "requested_dates": 0,
+        }
         mock_format_telegram_message.return_value = "telegram summary"
         mock_send_telegram_message.return_value = {"ok": True}
 

@@ -212,3 +212,4 @@ class PipelineResult:
     errors: List[str] = field(default_factory=list)
     warnings: List[str] = field(default_factory=list)
     execution_time_seconds: float = 0.0
+    telegram_sent: Optional[bool] = None

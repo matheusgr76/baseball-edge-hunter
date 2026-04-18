@@ -2,6 +2,33 @@
 
 ## DONE
 
+### Phase 5 — Real Bets Logger ✅ (2026-04-18)
+- [x] Add run-level logger module `output/real_bets_logger.py`
+  - `start_run_session()` for run IDs and artifact paths
+  - `tee_terminal_output()` to capture full stdout/stderr transcript while mirroring console
+  - `write_run_artifacts()` to persist immutable run artifacts:
+    - `output/real_bets/runs/YYYY-MM-DD/{run_id}.log`
+    - `output/real_bets/runs/YYYY-MM-DD/{run_id}.json`
+  - `append_daily_bets_index()` for actionable-only append ledger:
+    - `output/real_bets/daily/real_bets_YYYY-MM-DD.jsonl`
+- [x] Wire logger into `main.py` wrapper (`run_with_real_bets_logging()`)
+  - Captures manual run transcript for every pipeline execution
+  - Writes failed-run artifacts on exceptions and then re-raises
+  - Logger errors are fail-open (warn to stderr, do not block pipeline)
+- [x] Extend `PipelineResult` with best-effort `telegram_sent` status
+- [x] Add tests:
+  - `tests/test_real_bets_logger.py` (session paths, tee capture, append-without-dedupe)
+  - `tests/test_main_real_bets_logging.py` (success actionable-only ledger + failure artifact write)
+
+### Phase 3f — Outcome Auto-Resolution ✅ (2026-04-18)
+- [x] Add automatic MLB final-score resolver in `output/clv_tracker.py`
+  - Populates `final_winner`, `picked_team_won`, `game_result_date`, `game_resolved_at` for logged signals
+  - Uses MLB Stats API schedule endpoint with timeout/retry and canonical team-name matching
+- [x] Keep CLV semantics unchanged (no synthetic `closing_line` from settlement prices)
+- [x] Wire auto-resolve step into pipeline (`orchestration/pipeline.py`) after `log_signals()`
+- [x] Extend CLV terminal summary with actionable outcome progress (resolved/wins/losses/win-rate + Phase 4 20-signal gate reminder)
+- [x] Add unit tests for outcome resolver and summary (`tests/test_clv_tracker_outcomes.py`)
+
 ### Phase 4 — Advanced Factors ✅ (2026-04-17)
 - [x] Add park-factor adjustment (data-driven via `data/park_factors.json`)
 - [x] Add wRC+ vs SP-handedness adjustment (data-driven via `data/wrc_plus_splits.json`)

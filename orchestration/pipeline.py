@@ -33,6 +33,7 @@ from output.report_formatter import (
 )
 from output.clv_tracker import (
     log_signals,
+    resolve_game_outcomes,
     print_clv_summary,
     print_weekly_summary,
     print_pnl_chart,
@@ -196,6 +197,14 @@ def run_pipeline() -> PipelineResult:
     if new_logged:
         print(f"  📝 CLV tracker: {new_logged} new signal(s) logged → output/predictions_log.json")
 
+    outcome_resolution = resolve_game_outcomes(actionable_only=True)
+    if outcome_resolution["updated"] > 0:
+        print(
+            "  ✅ Outcome resolver: "
+            f"{outcome_resolution['updated']} signal(s) updated "
+            f"({outcome_resolution['actionable_updated']} actionable)"
+        )
+
     # ── Step 9: CSV export ───────────────────────────────────────────────────
     if ranked_edges:
         export_csv(ranked_edges, config.OUTPUT_DIRECTORY)
@@ -218,6 +227,7 @@ def run_pipeline() -> PipelineResult:
     telegram_response = send_telegram_message(telegram_message)
     if not telegram_response:
         logger.info("Telegram summary skipped or failed after pipeline completion.")
+    telegram_sent = bool(telegram_response)
 
     return PipelineResult(
         timestamp=timestamp,
@@ -228,6 +238,7 @@ def run_pipeline() -> PipelineResult:
         errors=errors,
         warnings=warnings,
         execution_time_seconds=elapsed,
+        telegram_sent=telegram_sent,
     )
 
 

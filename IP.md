@@ -11,12 +11,14 @@ Same 5-layer architecture as NBA/Soccer Edge Hunter. MLB-specific adaptations be
 
 ---
 
-## Current Status (2026-04-17)
+## Current Status (2026-04-18)
 
 - Reliability hardening completed before Phase 4 (stricter thresholds, confidence tightening, rematch flip guard, fail-closed Polymarket outcome mapping).
 - Phase 4 advanced-factor framework is now implemented in pipeline runtime.
 - Current calibration cap in production code is **±6pp per team** (reduced from ±8pp during reliability pass).
-- Validation next step: run live sample and evaluate CLV/false positives before tuning Phase 4 weights.
+- Outcome auto-resolution for logged signals is now wired in `output/clv_tracker.py` and called from pipeline runtime.
+- Real bets run archiving is now wired in entrypoint flow (`main.py`) with immutable per-run transcript + metadata artifacts and actionable-only daily JSONL ledger.
+- Validation next step: grow **resolved actionable outcomes** to the post-Phase-4 threshold, then evaluate CLV/false positives before tuning weights.
 
 ---
 

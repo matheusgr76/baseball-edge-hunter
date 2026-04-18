@@ -24,22 +24,33 @@ Schema per entry:
     "logged_at":      str (ISO-8601),
     "closing_line":   float | null,   # filled in post-game
     "clv":            float | null,   # closing_line - polymarket_prob (pp)
-    "resolved_at":    str | null
+    "resolved_at":    str | null,
+    "final_winner":   str | null,     # canonical team name
+    "picked_team_won": bool | null,   # True when logged side won
+    "game_result_date": str | null,   # YYYY-MM-DD from MLB schedule
+    "game_resolved_at": str | null
   }
 """
 
 import json
 import os
 from collections import defaultdict
-from datetime import datetime
-from typing import Dict, List, Optional, Any
+from datetime import datetime, timedelta, timezone
+from typing import Any, Dict, List, Optional, Set, Tuple
+
+import requests
 
 from models import EdgeAnalysis
+from normalization.teams import normalize_team_name
+import config
 
 
 # ── Constants ────────────────────────────────────────────────────────────────
 
 _LOG_FILE = os.path.join("output", "predictions_log.json")
+_MLB_SCHEDULE_URL = "https://statsapi.mlb.com/api/v1/schedule"
+_HTTP_HEADERS = {"User-Agent": "mlb-edge-hunter/1.0"}
+_FINAL_STATES = {"Final", "Completed Early", "Game Over"}
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -87,7 +98,136 @@ def _edge_to_entry(edge: EdgeAnalysis, now: str) -> Dict[str, Any]:
         "closing_line":    None,
         "clv":             None,
         "resolved_at":     None,
+        "final_winner":    None,
+        "picked_team_won": None,
+        "game_result_date": None,
+        "game_resolved_at": None,
     }
+
+
+def _parse_iso_datetime(value: Optional[str]) -> Optional[datetime]:
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _request_json_with_retry(url: str, params: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    for attempt in range(1, config.MAX_RETRIES + 1):
+        try:
+            response = requests.get(
+                url,
+                params=params,
+                headers=_HTTP_HEADERS,
+                timeout=config.REQUEST_TIMEOUT,
+            )
+            print(
+                "  [MLB API]",
+                f"{datetime.now().isoformat()}",
+                f"status={response.status_code}",
+                f"attempt={attempt}",
+                f"params={params}",
+            )
+            response.raise_for_status()
+            return response.json()
+        except requests.RequestException:
+            if attempt == config.MAX_RETRIES:
+                return None
+    return None
+
+
+def _fetch_final_games_for_date(date_str: str) -> List[Dict[str, Any]]:
+    payload = _request_json_with_retry(
+        _MLB_SCHEDULE_URL,
+        {"sportId": 1, "date": date_str},
+    )
+    if not payload:
+        return []
+
+    finals: List[Dict[str, Any]] = []
+    for block in payload.get("dates", []):
+        for game in block.get("games", []):
+            detailed_state = (game.get("status") or {}).get("detailedState", "")
+            if detailed_state not in _FINAL_STATES:
+                continue
+
+            teams = game.get("teams") or {}
+            home_team_raw = (((teams.get("home") or {}).get("team") or {}).get("name", ""))
+            away_team_raw = (((teams.get("away") or {}).get("team") or {}).get("name", ""))
+            if not home_team_raw or not away_team_raw:
+                continue
+
+            home_team = normalize_team_name(home_team_raw)
+            away_team = normalize_team_name(away_team_raw)
+            home_score = (teams.get("home") or {}).get("score")
+            away_score = (teams.get("away") or {}).get("score")
+            if not isinstance(home_score, int) or not isinstance(away_score, int):
+                continue
+            if home_score == away_score:
+                continue
+
+            winner = home_team if home_score > away_score else away_team
+            game_dt = _parse_iso_datetime(game.get("gameDate"))
+            finals.append(
+                {
+                    "home_team": home_team,
+                    "away_team": away_team,
+                    "winner": winner,
+                    "game_date": block.get("date", date_str),
+                    "game_time": game_dt,
+                }
+            )
+    return finals
+
+
+def _candidate_dates(commence_time: Optional[datetime]) -> Set[str]:
+    if commence_time is None:
+        return set()
+    dates = {commence_time.date()}
+    dates.add((commence_time - timedelta(days=1)).date())
+    dates.add((commence_time + timedelta(days=1)).date())
+    return {d.isoformat() for d in dates}
+
+
+def _match_final_game(
+    entry: Dict[str, Any],
+    finals_by_date: Dict[str, List[Dict[str, Any]]],
+) -> Optional[Dict[str, Any]]:
+    team_name = normalize_team_name(str(entry.get("team_name", "")))
+    opponent = normalize_team_name(str(entry.get("opponent", "")))
+    if not team_name or not opponent:
+        return None
+
+    commence_time = _parse_iso_datetime(entry.get("commence_time"))
+    date_candidates = sorted(_candidate_dates(commence_time))
+    match_key = tuple(sorted((team_name.lower(), opponent.lower())))
+
+    candidates: List[Dict[str, Any]] = []
+    for date_key in date_candidates:
+        for game in finals_by_date.get(date_key, []):
+            game_key = tuple(
+                sorted((game["home_team"].lower(), game["away_team"].lower()))
+            )
+            if game_key == match_key:
+                candidates.append(game)
+
+    if not candidates:
+        return None
+    if len(candidates) == 1 or commence_time is None:
+        return candidates[0]
+
+    def _distance_seconds(game_row: Dict[str, Any]) -> float:
+        game_time = game_row.get("game_time")
+        if not isinstance(game_time, datetime):
+            return float("inf")
+        return abs((game_time - commence_time).total_seconds())
+
+    return min(candidates, key=_distance_seconds)
 
 
 # ── Public API ────────────────────────────────────────────────────────────────
@@ -154,6 +294,104 @@ def resolve_signal(
             return clv
 
     return None
+
+
+def resolve_game_outcomes(actionable_only: bool = True) -> Dict[str, Any]:
+    """
+    Resolve logged entries against official MLB final scores.
+
+    This function updates outcome fields only (`final_winner`, `picked_team_won`),
+    and intentionally does not infer or overwrite CLV closing lines.
+    """
+    entries = _load_log()
+    if not entries:
+        return {
+            "entries_scanned": 0,
+            "eligible_unresolved": 0,
+            "updated": 0,
+            "actionable_updated": 0,
+            "requested_dates": 0,
+        }
+
+    now_utc = datetime.now(timezone.utc)
+    unresolved: List[Dict[str, Any]] = []
+    all_dates: Set[str] = set()
+
+    for entry in entries:
+        if actionable_only and not entry.get("actionable", False):
+            continue
+        if entry.get("picked_team_won") is not None:
+            continue
+
+        commence_time = _parse_iso_datetime(entry.get("commence_time"))
+        if commence_time is None or commence_time >= now_utc:
+            continue
+
+        unresolved.append(entry)
+        all_dates.update(_candidate_dates(commence_time))
+
+    if not unresolved:
+        return {
+            "entries_scanned": len(entries),
+            "eligible_unresolved": 0,
+            "updated": 0,
+            "actionable_updated": 0,
+            "requested_dates": 0,
+        }
+
+    finals_by_date: Dict[str, List[Dict[str, Any]]] = {}
+    for date_key in sorted(all_dates):
+        finals_by_date[date_key] = _fetch_final_games_for_date(date_key)
+
+    updated = 0
+    actionable_updated = 0
+    resolved_at = datetime.now().isoformat()
+    for entry in unresolved:
+        match = _match_final_game(entry, finals_by_date)
+        if not match:
+            continue
+
+        winner = match["winner"]
+        team_name = normalize_team_name(str(entry.get("team_name", "")))
+        picked_team_won = team_name.lower() == winner.lower()
+
+        entry["final_winner"] = winner
+        entry["picked_team_won"] = picked_team_won
+        entry["game_result_date"] = match.get("game_date")
+        entry["game_resolved_at"] = resolved_at
+        updated += 1
+        if entry.get("actionable", False):
+            actionable_updated += 1
+
+    if updated:
+        _save_log(entries)
+
+    return {
+        "entries_scanned": len(entries),
+        "eligible_unresolved": len(unresolved),
+        "updated": updated,
+        "actionable_updated": actionable_updated,
+        "requested_dates": len(all_dates),
+    }
+
+
+def outcome_summary() -> Dict[str, Any]:
+    """Summarize resolved game outcomes over logged actionable signals."""
+    entries = _load_log()
+    actionable = [e for e in entries if e.get("actionable", False)]
+    resolved = [e for e in actionable if e.get("picked_team_won") is not None]
+    wins = sum(1 for e in resolved if e.get("picked_team_won") is True)
+    losses = sum(1 for e in resolved if e.get("picked_team_won") is False)
+    n = len(resolved)
+    win_rate = round((wins / n) * 100, 2) if n else 0.0
+
+    return {
+        "actionable_total": len(actionable),
+        "actionable_resolved": n,
+        "actionable_wins": wins,
+        "actionable_losses": losses,
+        "actionable_win_rate_pct": win_rate,
+    }
 
 
 def clv_summary() -> Dict[str, Any]:
@@ -297,6 +535,7 @@ def print_pnl_chart() -> None:
 def print_clv_summary() -> None:
     """Print a formatted CLV summary to the terminal."""
     s = clv_summary()
+    o = outcome_summary()
 
     print()
     print("=" * 70)
@@ -307,6 +546,18 @@ def print_clv_summary() -> None:
     print(f"  Actionable resolved  : {s['actionable']}")
     print(f"  CLV beat-rate        : {s['clv_beat_rate_pct']:.1f}%  (target ≥ 55%)")
     print(f"  Avg CLV              : {s['avg_clv_pp']:+.2f}pp")
+    print()
+    print("  Outcome tracking (actionable only):")
+    print(
+        "  "
+        f"resolved={o['actionable_resolved']}/{o['actionable_total']}  "
+        f"wins={o['actionable_wins']}  "
+        f"losses={o['actionable_losses']}  "
+        f"win-rate={o['actionable_win_rate_pct']:.1f}%"
+    )
+    if o["actionable_resolved"] < 20:
+        remaining_outcomes = 20 - o["actionable_resolved"]
+        print(f"  ⚠️  Need {remaining_outcomes} more resolved actionable outcomes for Phase 4 review gate")
     if s["actionable"] < 100:
         remaining = 100 - s["actionable"]
         print(f"  ⚠️  Need {remaining} more resolved actionable signals to hit sample target")

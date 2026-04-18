@@ -11,3 +11,5 @@ build/
 past-seasons/
 output/predictions_log.json
 output/daily_report_*.txt
+output/real_bets/
+output/_test_artifacts/
