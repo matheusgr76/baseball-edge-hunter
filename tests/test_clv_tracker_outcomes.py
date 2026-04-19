@@ -47,6 +47,37 @@ class ClvTrackerOutcomeTests(unittest.TestCase):
         self.assertEqual(summary["actionable_losses"], 1)
         self.assertEqual(summary["actionable_win_rate_pct"], 50.0)
 
+    def test_reliability_gate_status_requires_dual_gate(self) -> None:
+        self._write_entries(
+            [
+                {"actionable": True, "picked_team_won": True},
+                {"actionable": True, "picked_team_won": False},
+                {"actionable": True, "picked_team_won": None},
+            ]
+        )
+
+        gate = clv_tracker.reliability_gate_status()
+
+        self.assertFalse(gate["dual_gate_met"])
+        self.assertEqual(gate["resolved_actionable"], 2)
+        self.assertGreater(gate["resolved_remaining"], 0)
+        self.assertTrue(gate["resolved_required"] >= 20)
+        self.assertTrue(gate["win_rate_required_pct"] >= 55.0)
+
+    def test_reliability_gate_status_met_when_conditions_pass(self) -> None:
+        self._write_entries(
+            [{"actionable": True, "picked_team_won": True} for _ in range(20)]
+        )
+
+        gate = clv_tracker.reliability_gate_status()
+
+        self.assertTrue(gate["resolved_ok"])
+        self.assertTrue(gate["win_rate_ok"])
+        self.assertTrue(gate["dual_gate_met"])
+        self.assertTrue(gate["retuning_allowed"])
+        self.assertEqual(gate["resolved_remaining"], 0)
+        self.assertEqual(gate["win_rate_gap_pct"], 0.0)
+
     @patch("output.clv_tracker._fetch_final_games_for_date")
     def test_resolve_game_outcomes_updates_actionable_entries(
         self,

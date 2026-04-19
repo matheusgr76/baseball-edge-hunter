@@ -5,6 +5,7 @@ Responsibilities:
   1. log_signals()  — append EdgeAnalysis results to predictions_log.json on each pipeline run
   2. resolve_signal() — record closing Polymarket line after game resolves + compute CLV
   3. clv_summary()  — aggregate CLV% and beat-rate over all resolved signals
+  4. reliability_gate_status() — evaluate dual-gate operational readiness
 
 File: output/predictions_log.json
 Schema per entry:
@@ -394,6 +395,40 @@ def outcome_summary() -> Dict[str, Any]:
     }
 
 
+def reliability_gate_status() -> Dict[str, Any]:
+    """
+    Evaluate operational dual gate for reliability-driven retuning decisions.
+
+    Gate conditions:
+      1) resolved actionable outcomes >= RELIABILITY_GATE_MIN_RESOLVED_ACTIONABLE
+      2) actionable win-rate >= RELIABILITY_GATE_MIN_WIN_RATE_PCT
+    """
+    summary = outcome_summary()
+    resolved_required = int(config.RELIABILITY_GATE_MIN_RESOLVED_ACTIONABLE)
+    win_rate_required = float(config.RELIABILITY_GATE_MIN_WIN_RATE_PCT)
+
+    resolved = int(summary["actionable_resolved"])
+    win_rate = float(summary["actionable_win_rate_pct"])
+
+    resolved_ok = resolved >= resolved_required
+    win_rate_ok = win_rate >= win_rate_required
+    dual_gate_met = resolved_ok and win_rate_ok
+
+    return {
+        "rollout_mode": str(config.RELIABILITY_ROLLOUT_MODE),
+        "resolved_actionable": resolved,
+        "resolved_required": resolved_required,
+        "resolved_remaining": max(0, resolved_required - resolved),
+        "win_rate_pct": round(win_rate, 2),
+        "win_rate_required_pct": round(win_rate_required, 2),
+        "win_rate_gap_pct": round(max(0.0, win_rate_required - win_rate), 2),
+        "resolved_ok": resolved_ok,
+        "win_rate_ok": win_rate_ok,
+        "dual_gate_met": dual_gate_met,
+        "retuning_allowed": dual_gate_met,
+    }
+
+
 def clv_summary() -> Dict[str, Any]:
     """
     Compute aggregate CLV statistics over all resolved signals.
@@ -536,6 +571,7 @@ def print_clv_summary() -> None:
     """Print a formatted CLV summary to the terminal."""
     s = clv_summary()
     o = outcome_summary()
+    gate = reliability_gate_status()
 
     print()
     print("=" * 70)
@@ -555,9 +591,23 @@ def print_clv_summary() -> None:
         f"losses={o['actionable_losses']}  "
         f"win-rate={o['actionable_win_rate_pct']:.1f}%"
     )
-    if o["actionable_resolved"] < 20:
-        remaining_outcomes = 20 - o["actionable_resolved"]
-        print(f"  ⚠️  Need {remaining_outcomes} more resolved actionable outcomes for Phase 4 review gate")
+    print(f"  Rollout mode          : {gate['rollout_mode']}")
+    if not gate["dual_gate_met"]:
+        if not gate["resolved_ok"]:
+            print(
+                "  ⚠️  Need "
+                f"{gate['resolved_remaining']} more resolved actionable outcomes "
+                "for reliability dual gate"
+            )
+        if not gate["win_rate_ok"]:
+            print(
+                "  ⚠️  Need "
+                f"+{gate['win_rate_gap_pct']:.1f}pp actionable win-rate "
+                "to meet reliability dual gate"
+            )
+        print("  ⚠️  Retuning remains locked until dual gate is satisfied")
+    else:
+        print("  ✅ Reliability dual gate met — retuning review is unlocked")
     if s["actionable"] < 100:
         remaining = 100 - s["actionable"]
         print(f"  ⚠️  Need {remaining} more resolved actionable signals to hit sample target")

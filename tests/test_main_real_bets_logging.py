@@ -68,6 +68,7 @@ class MainRealBetsLoggingTests(unittest.TestCase):
         payload = json.loads(run_json_files[0].read_text(encoding="utf-8"))
         self.assertEqual(payload["run_status"], "success")
         self.assertTrue(payload["telegram_sent"])
+        self.assertIn("reliability_gate", payload["pipeline_summary"])
 
         daily_files = list((self.test_root / "real_bets" / "daily").glob("*.jsonl"))
         self.assertEqual(len(daily_files), 1)

@@ -68,6 +68,12 @@ REMATCH_FLIP_MIN_PRIOR_EDGE: float = 5.0
 REMATCH_FLIP_OVERRIDE_EDGE: float = 9.0
 REMATCH_FLIP_CONF_PENALTY: int = 8
 
+# Reliability operations policy.
+# Dual gate controls when threshold/factor retuning may be considered.
+RELIABILITY_ROLLOUT_MODE: str = "SHADOW_THEN_ACT"
+RELIABILITY_GATE_MIN_RESOLVED_ACTIONABLE: int = 20
+RELIABILITY_GATE_MIN_WIN_RATE_PCT: float = 55.0
+
 # ============================================================================
 # PIPELINE SETTINGS
 # ============================================================================

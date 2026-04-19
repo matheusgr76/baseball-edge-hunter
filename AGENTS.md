@@ -463,8 +463,16 @@ Every implementation MUST:
 - `trash` > `rm` (recoverable beats gone forever)
 - When in doubt, ask.
 
-## Project Status Note (2026-04-17)
+## Project Status Note (2026-04-19)
 
-- Phase 4 advanced factors were implemented in production flow (`park`, `wRC+ handedness`, `pythagorean regression`, `OAA`, `umpire tendency`).
-- Reliability-first controls remain active (stricter actionable thresholds, confidence hardening, rematch flip guard, fail-closed market matching).
-- Next calibration checkpoint: retune factor weights only after at least 20 resolved actionable signals with fresh CLV/false-positive review.
+- Phase 4 advanced factors are live in production flow (`park`, `wRC+ handedness`, `pythagorean regression`, `OAA`, `umpire tendency`).
+- Reliability-first controls remain active:
+  - `STRONG BET`: 4.0pp / 85%
+  - `BET`: 3.5pp / 75%
+  - moderate/high favorite edge-floor guards
+  - rematch flip guard
+  - fail-closed market matching
+  - Polymarket liquidity floor: $750
+- Operational policy is `Shadow-Then-Act` while conservative thresholds remain unchanged.
+- Dual-gate status is now evaluated in runtime (`reliability_gate_status`) and printed in CLV summary each run.
+- Next calibration checkpoint (dual gate): only consider retuning factor weights after at least 20 resolved actionable signals and at least 55% actionable win-rate, followed by fresh CLV/false-positive review.

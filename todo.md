@@ -2,6 +2,41 @@
 
 ## DONE
 
+### Documentation Sync + Operational Baseline ✅ (2026-04-19)
+- [x] Normalize core documentation to current runtime truth:
+  - `STRONG BET` = 4.0pp / 85%
+  - `BET` = 3.5pp / 75%
+  - calibration cap = ±6pp per team
+  - reliability guards + rematch flip policy active
+  - liquidity floor = $750
+- [x] Replace malformed `CLAUDE.md` "IMPORTANT" block with explicit sections:
+  - `## Debugging`
+  - `## Workflow`
+  - `## Git`
+- [x] Create operator docs:
+  - `README.md` (quickstart + operational policy)
+  - `HANDOFF.md` (current status + runbook + risks)
+- [x] Lock reliability policy in docs:
+  - Dual gate: at least 20 resolved actionable signals + at least 55% actionable win-rate
+  - Rollout mode: Shadow-Then-Act with conservative thresholds unchanged
+
+### Reliability Operations Runtime ✅ (2026-04-19)
+- [x] Add explicit reliability policy config in `config.py`
+  - `RELIABILITY_ROLLOUT_MODE = SHADOW_THEN_ACT`
+  - `RELIABILITY_GATE_MIN_RESOLVED_ACTIONABLE = 20`
+  - `RELIABILITY_GATE_MIN_WIN_RATE_PCT = 55.0`
+- [x] Add `reliability_gate_status()` in `output/clv_tracker.py`
+  - Evaluates resolved-actionable sample and actionable win-rate dual gate
+  - Exposes `dual_gate_met` and `retuning_allowed` booleans
+- [x] Extend CLV terminal summary to print operational gate status
+  - shows rollout mode and explicit gate blockers when not met
+- [x] Add reliability-gate snapshot to run artifacts in `output/real_bets_logger.py`
+  - persisted under `pipeline_summary.reliability_gate` in each run JSON
+- [x] Add/update tests:
+  - `tests/test_clv_tracker_outcomes.py` (dual-gate false/true scenarios)
+  - `tests/test_real_bets_logger.py` (artifact includes reliability gate snapshot)
+  - `tests/test_main_real_bets_logging.py` (run payload includes reliability gate snapshot)
+
 ### Phase 5 — Real Bets Logger ✅ (2026-04-18)
 - [x] Add run-level logger module `output/real_bets_logger.py`
   - `start_run_session()` for run IDs and artifact paths
@@ -90,7 +125,7 @@
 - [x] Update `comparison/edge.py` — accepts `CanonicalGame` or `CalibratedGame`; passes factors to EdgeAnalysis
 - [x] Update `orchestration/pipeline.py` — calibration step wired between consensus and Polymarket gatekeeper
 - [x] Update `output/report_formatter.py` — real factor rows (SP + bullpen); shows consensus vs calibrated prob
-- [x] Total calibration cap: ±8pp per team
+- [x] Historical Phase 2 cap was ±8pp per team (current production cap is ±6pp after reliability hardening)
 - [x] Smoke tests pass (FIP math, calibration direction, prob normalization)
 
 ---
@@ -182,6 +217,18 @@
 - [x] Park factors (`data/park_factors.json`) integrated
 - [ ] Calibrate factor weights using fresh CLV sample after at least 20 resolved actionable signals
 - [ ] Replace seed wRC+/OAA/umpire datasets with production values and re-verify
+
+---
+
+## Operationalization — Reliability First
+- [ ] Maintain Shadow-Then-Act operation until reliability gate is met
+- [ ] Reach dual gate for recalibration decisions:
+  - at least 20 resolved actionable signals
+  - at least 55% actionable win-rate
+- [ ] Perform formal reliability review immediately after gate is met:
+  - false-positive analysis by confidence bucket
+  - factor contribution review
+  - go/no-go decision on threshold/factor retuning
 
 ---
 

@@ -89,6 +89,7 @@ class RealBetsLoggerTests(unittest.TestCase):
         self.assertIn("terminal-line", log_text)
         self.assertIn("stderr-line", log_text)
         self.assertEqual(payload["run_status"], "success")
+        self.assertIn("reliability_gate", payload["pipeline_summary"])
         self.assertTrue(session.json_path.exists())
 
     def test_daily_jsonl_keeps_duplicate_game_side_across_runs(self) -> None:

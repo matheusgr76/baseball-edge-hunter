@@ -114,6 +114,24 @@ def _atomic_write_json(path: Path, payload: Dict[str, Any]) -> None:
     _atomic_write_text(path, json.dumps(payload, indent=2, ensure_ascii=False))
 
 
+def _reliability_gate_snapshot() -> Dict[str, Any]:
+    """
+    Best-effort runtime snapshot of reliability gate status.
+
+    Fail-open by design: if the tracker cannot be read here, include an error
+    payload instead of raising.
+    """
+    try:
+        from output.clv_tracker import reliability_gate_status
+
+        return reliability_gate_status()
+    except Exception as exc:  # pragma: no cover - defensive snapshot path
+        return {
+            "available": False,
+            "error": f"{type(exc).__name__}: {exc}",
+        }
+
+
 def _run_payload(
     session: RunSession,
     run_status: str,
@@ -152,6 +170,7 @@ def _run_payload(
             "warnings": warnings,
             "errors": errors,
             "lineup_warnings": _lineup_warnings(warnings),
+            "reliability_gate": _reliability_gate_snapshot(),
         },
         "artifacts": {
             "transcript_log": str(session.log_path),
