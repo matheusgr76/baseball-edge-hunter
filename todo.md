@@ -37,6 +37,13 @@
   - `tests/test_real_bets_logger.py` (artifact includes reliability gate snapshot)
   - `tests/test_main_real_bets_logging.py` (run payload includes reliability gate snapshot)
 
+### Automation — Daily GitHub Run ✅ (2026-04-28)
+- [x] Add scheduled GitHub Actions workflow: `.github/workflows/daily-mlb-pipeline.yml`
+  - Daily cron at `13:00 UTC` (`10:00 America/Sao_Paulo`)
+  - Manual trigger via `workflow_dispatch`
+  - Runs `python main.py` with `ODDS_API_KEY` secret validation
+  - Uploads `output/` artifacts for each run
+
 ### Phase 5 — Real Bets Logger ✅ (2026-04-18)
 - [x] Add run-level logger module `output/real_bets_logger.py`
   - `start_run_session()` for run IDs and artifact paths
