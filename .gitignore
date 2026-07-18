@@ -5,6 +5,7 @@ __pycache__/
 output/*.csv
 .idea/
 .vscode/
+.claude/
 *.egg-info/
 dist/
 build/

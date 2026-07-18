@@ -80,10 +80,13 @@ def format_telegram_message(
         )
         for row in summary_rows:
             emoji = _VERDICT_EMOJI.get(str(row["signal"]), "")
+            game = html.escape(f"{row['game']:<8}")
+            fav = html.escape(f"{row['fav']:<5}")
+            verdict = html.escape(f"{row['verdict']:<10}")
             lines.append(
-                f"{row['prefix']} {row['game']:<8} | {row['fav']:<5} | "
+                f"{row['prefix']} {game} | {fav} | "
                 f"{row['true_pct']:>2} | {row['poly_pct']:>2} | {row['conf_pct']:>2} | "
-                f"{row['edge']:>+5.1f} | {row['verdict']:<10} {emoji}"
+                f"{row['edge']:>+5.1f} | {verdict} {emoji}"
             )
         lines.append("</code></pre>")
     else:

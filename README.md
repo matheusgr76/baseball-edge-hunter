@@ -38,12 +38,19 @@ The pipeline compares Polymarket prices against a devigged, Pinnacle-weighted bo
 ## Quickstart
 1. Install dependencies:
    - `pip install -r requirements.txt`
-2. Set required env vars:
-   - `ODDS_API_KEY` (required)
-   - `TELEGRAM_BOT_TOKEN` (optional)
-   - `TELEGRAM_CHAT_ID` (optional)
+2. Configure environment:
+   - `cp .env.example .env`
+   - Fill in `ODDS_API_KEY` (required); `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` are optional — leave blank to disable outbound alerts.
 3. Run:
    - `python main.py`
+
+## Tests
+```bash
+pytest
+```
+
+## Automation
+Runs daily via GitHub Actions ([`.github/workflows/daily-mlb-pipeline.yml`](.github/workflows/daily-mlb-pipeline.yml)) at 10:00 America/Sao_Paulo. Secrets (`ODDS_API_KEY`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`) are configured under repo Settings → Secrets and variables → Actions. Each run uploads `output/` as a workflow artifact (14-day retention) and can also be triggered manually via `workflow_dispatch`.
 
 ## Key Output Paths
 - Daily reports: `output/daily_report_YYYY-MM-DD.txt`
@@ -62,3 +69,6 @@ The pipeline compares Polymarket prices against a devigged, Pinnacle-weighted bo
 - `output/clv_tracker.py`: signal logging, outcome resolver, summaries
 - `todo.md`: execution log and open priorities
 - `HANDOFF.md`: current operational status and next actions
+
+## License
+All rights reserved — see [`LICENSE`](LICENSE).
